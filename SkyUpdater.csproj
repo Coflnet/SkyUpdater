@@ -1,11 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../websocket-sharp/websocket-sharp/websocket-sharp.csproj" />
     <ProjectReference Include="../dev/hypixel.csproj" />
   </ItemGroup>
 
@@ -14,7 +13,6 @@
     <PackageReference Include="RateLimiter" Version="2.2.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.1.5" />
     <PackageReference Include="Swashbuckle.AspNetCore.Newtonsoft" Version="6.1.5" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="5.0.0" />
   </ItemGroup>
 
 </Project>
