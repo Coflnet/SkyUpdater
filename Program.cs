@@ -17,6 +17,7 @@ namespace Coflnet.Sky.Updater
         {
             var bazzar = new BazaarUpdater();
             var updater = new Updater(apiKey);
+            FileController.dataPaht = "/data";
             updater.UpdateForEver();
             bazzar.UpdateForEver(apiKey);
 

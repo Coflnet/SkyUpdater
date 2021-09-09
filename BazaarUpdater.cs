@@ -17,8 +17,7 @@ namespace Coflnet.Sky.Updater
 
         public static Dictionary<string, QuickStatus> LastStats = new Dictionary<string, QuickStatus>();
 
-        public static readonly string ConsumeTopic = SimplerConfig.Config.Instance["TOPICS:BAZAAR_CONSUME"];
-        public static readonly string ProduceTopic = SimplerConfig.Config.Instance["TOPICS:BAZAAR"];
+        public static readonly string KafkaTopic = SimplerConfig.Config.Instance["TOPICS:BAZAAR"];
 
 
         private static async Task PullAndSave(HypixelApi api, int i)
@@ -110,7 +109,7 @@ namespace Coflnet.Sky.Updater
         {
             using (var p = new ProducerBuilder<string, BazaarPull>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<BazaarPull>()).Build())
             {
-                var result = await p.ProduceAsync(ProduceTopic, new Message<string, BazaarPull> { Value = pull, Key = pull.Timestamp.ToString() });
+                var result = await p.ProduceAsync(KafkaTopic, new Message<string, BazaarPull> { Value = pull, Key = pull.Timestamp.ToString() });
                 Console.WriteLine("wrote bazaar log " + result.TopicPartitionOffset.Offset);
             }
         }

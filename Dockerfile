@@ -13,7 +13,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:3.1
 WORKDIR /app
 
 COPY --from=build /build/SkyCommand/bin/release/netcoreapp3.1/publish/ .
-RUN mkdir -p ah/files
+RUN mkdir /data
 #COPY --from=frontend /build/build/ /data/files
 
 ENTRYPOINT ["dotnet", "SkyUpdater.dll"]

@@ -16,6 +16,7 @@ namespace Coflnet.Sky.Updater
     public class Updater
     {
         private const string LAST_UPDATE_KEY = "lastUpdate";
+        private static int MillisecondsDelay = Int32.Parse(SimplerConfig.Config.Instance["SLOWDOWN_MS"]);
         private string apiKey;
         private bool abort;
         private static bool minimumOutput;
@@ -111,14 +112,6 @@ namespace Coflnet.Sky.Updater
             //if (FileController.Exists ("lastUpdate"))
             //    lastUpdate = FileController.LoadAs<DateTime> ("lastUpdate").ToLocalTime ();
 
-            var lastUpdateStart = new DateTime(0);
-            if (FileController.Exists("lastUpdateStart"))
-                lastUpdateStart = FileController.LoadAs<DateTime>("lastUpdateStart").ToLocalTime();
-
-            if (!minimumOutput)
-                Console.WriteLine($"{lastUpdateStart > lastUpdate} {DateTime.Now - lastUpdateStart}");
-            FileController.SaveAs("lastUpdateStart", DateTime.Now);
-
             TimeSpan timeEst = new TimeSpan(0, 1, 1);
             Console.WriteLine($"Updating Data {DateTime.Now}");
 
@@ -147,7 +140,7 @@ namespace Coflnet.Sky.Updater
             for (int i = 0; i < max; i++)
             {
                 var index = i;
-                await Task.Delay(100);
+                await Task.Delay(MillisecondsDelay);
                 tasks.Add(taskFactory.StartNew(async () =>
                 {
                     try
