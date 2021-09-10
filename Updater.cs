@@ -32,6 +32,13 @@ namespace Coflnet.Sky.Updater
         private static bool doFullUpdate = false;
         Prometheus.Counter auctionUpdateCount = Prometheus.Metrics.CreateCounter("auction_update", "How many auctions were updated");
 
+        static Prometheus.HistogramConfiguration buckets = new Prometheus.HistogramConfiguration()
+        {
+            Buckets = Prometheus.Histogram.LinearBuckets(start: 0, width: 2, count: 10)
+        };
+        static Prometheus.Histogram sendingTime = Prometheus.Metrics.CreateHistogram("timeToSending", "The time from deserialising to sending. (should be close to 0)",
+            buckets);
+
         /// <summary>
         /// Index of the updater (if there are multiple updating is split amongst them)
         /// </summary>
@@ -470,6 +477,9 @@ namespace Coflnet.Sky.Updater
                     Console.WriteLine(!r.Error.IsError
                         ? $"Delivered {r.Topic} {r.Offset} "
                         : $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
+                if (r.Topic == NewAuctionsTopic)
+                    sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
+
             };
 
         public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd)
