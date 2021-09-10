@@ -103,18 +103,24 @@ namespace Coflnet.Sky.Updater
             }).ConfigureAwait(false); ;
         }
 
-        private static ProducerConfig producerConfig = new ProducerConfig { BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"] };
+        private static ProducerConfig producerConfig = new ProducerConfig
+        {
+            BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
+            LingerMs = 0
+        };
 
         private static async Task ProduceIntoQueue(BazaarPull pull)
         {
             using (var p = new ProducerBuilder<string, BazaarPull>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<BazaarPull>()).Build())
             {
-                var result = await p.ProduceAsync(KafkaTopic, new Message<string, BazaarPull> { Value = pull, Key = pull.Timestamp.ToString() });
-                Console.WriteLine("wrote bazaar log " + result.TopicPartitionOffset.Offset);
+                p.Produce(KafkaTopic, new Message<string, BazaarPull> { Value = pull, Key = pull.Timestamp.ToString() }, handler =>
+                {
+                    Console.WriteLine("wrote bazaar log " + handler.TopicPartitionOffset.Offset);
+                });
             }
         }
 
-        
+
 
         internal void Stop()
         {

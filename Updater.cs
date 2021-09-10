@@ -166,16 +166,16 @@ namespace Coflnet.Sky.Updater
                             if (index == 0)
                             {
                                 lastHypixelCache = res.LastUpdated;
-                                    // correct update time
-                                    Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
+                                // correct update time
+                                Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
                             }
 
                             var val = await Save(res, lastUpdate, activeUuids, p);
                             lock (sumloc)
                             {
                                 sum += val;
-                                    // process done
-                                    doneCont++;
+                                // process done
+                                doneCont++;
                             }
                             PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
                         }
@@ -458,7 +458,11 @@ namespace Coflnet.Sky.Updater
             }
         }
 
-        private static ProducerConfig producerConfig = new ProducerConfig { BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"] };
+        private static ProducerConfig producerConfig = new ProducerConfig
+        {
+            BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
+            LingerMs = 2
+        };
 
         static Action<DeliveryReport<string, SaveAuction>> handler = r =>
             {
