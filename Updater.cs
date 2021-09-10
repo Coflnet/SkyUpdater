@@ -140,14 +140,15 @@ namespace Coflnet.Sky.Updater
             AuctionCount = new ConcurrentDictionary<string, int>();
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
-            using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
-            {
 
-                for (int i = 0; i < max; i++)
+
+            for (int i = 0; i < max; i++)
+            {
+                var index = i;
+                await Task.Delay(MillisecondsDelay);
+                tasks.Add(taskFactory.StartNew(async () =>
                 {
-                    var index = i;
-                    await Task.Delay(MillisecondsDelay);
-                    tasks.Add(taskFactory.StartNew(async () =>
+                    using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
                     {
                         try
                         {
@@ -165,16 +166,16 @@ namespace Coflnet.Sky.Updater
                             if (index == 0)
                             {
                                 lastHypixelCache = res.LastUpdated;
-                                // correct update time
-                                Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
+                                    // correct update time
+                                    Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
                             }
 
                             var val = await Save(res, lastUpdate, activeUuids, p);
                             lock (sumloc)
                             {
                                 sum += val;
-                                // process done
-                                doneCont++;
+                                    // process done
+                                    doneCont++;
                             }
                             PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
                         }
@@ -190,20 +191,21 @@ namespace Coflnet.Sky.Updater
                                 Logger.Instance.Error($"Single page ({index}) could not be loaded twice because of {e.Message} {e.StackTrace} {e.InnerException?.Message}");
                             }
                         }
-
-                    }, cancelToken).Unwrap());
-                    PrintUpdateEstimate(i, doneCont, sum, updateStartTime, max);
-
-                    // try to stay under 600MB
-                    if (System.GC.GetTotalMemory(false) > 500000000)
-                    {
-                        Console.Write("\t mem: " + System.GC.GetTotalMemory(false));
-                        System.GC.Collect();
+                        p.Flush(TimeSpan.FromSeconds(10));
                     }
-                    //await Task.Delay(100);
+
+                }, cancelToken).Unwrap());
+                PrintUpdateEstimate(i, doneCont, sum, updateStartTime, max);
+
+                // try to stay under 600MB
+                if (System.GC.GetTotalMemory(false) > 500000000)
+                {
+                    Console.Write("\t mem: " + System.GC.GetTotalMemory(false));
+                    System.GC.Collect();
                 }
-                p.Flush(TimeSpan.FromSeconds(10));
+                //await Task.Delay(100);
             }
+
 
             await Task.WhenAll(tasks);
 
