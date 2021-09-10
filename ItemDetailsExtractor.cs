@@ -96,7 +96,6 @@ namespace Coflnet.Sky.Updater
             i.Extra = a.Extra;
             i.MinecraftType = MinecraftTypeParser.Instance.Parse(a);
 
-            //Console.WriteLine($"New: {name} ({i.MinecraftType})" );
             SetIconUrl(a, i);
 
             ItemDetails.Instance.Items[name] = i;
@@ -135,7 +134,6 @@ namespace Coflnet.Sky.Updater
                 {
                     Console.WriteLine($"Error :O \n {e.Message} \n {e.StackTrace}");
                 }
-                // Console.WriteLine(i.IconUrl);
             }
             else
             {

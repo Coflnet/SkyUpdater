@@ -18,8 +18,17 @@ namespace Coflnet.Sky.Updater
             var bazzar = new BazaarUpdater();
             var updater = new Updater(apiKey);
             FileController.dataPaht = "/data";
+            var loading = hypixel.ItemDetails.Instance.LoadFromDB();
             updater.UpdateForEver();
             bazzar.UpdateForEver(apiKey);
+            try
+            {
+                loading.Wait();
+            } catch(Exception e)
+            {
+                Console.WriteLine("-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|");
+                Console.WriteLine($"Failed to load items {e.Message}\n {e.StackTrace}");
+            }
 
             CreateHostBuilder(args).Build().Run();
         }
