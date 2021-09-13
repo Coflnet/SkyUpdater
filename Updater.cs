@@ -10,6 +10,7 @@ using dev;
 using hypixel;
 using Hypixel.NET;
 using Hypixel.NET.SkyblockApi;
+using OpenTracing.Propagation;
 
 namespace Coflnet.Sky.Updater
 {
@@ -500,8 +501,12 @@ namespace Coflnet.Sky.Updater
 
         private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, Confluent.Kafka.IProducer<string, hypixel.SaveAuction> p)
         {
+            var tracer = OpenTracing.Util.GlobalTracer.Instance;
             foreach (var item in auctionsToAdd)
             {
+                var scope = tracer.BuildSpan("FindAuction").StartActive();
+                item.TraceContext = new Tracing.TextMap();
+                tracer.Inject(scope.Span.Context, BuiltinFormats.TextMap, item.TraceContext);
                 p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, handler);
             }
         }
