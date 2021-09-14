@@ -149,15 +149,15 @@ namespace Coflnet.Sky.Updater
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
 
-
-            for (int i = 0; i < max; i++)
+            using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
-                var index = i;
-                await Task.Delay(MillisecondsDelay);
-                tasks.Add(taskFactory.StartNew(async () =>
+                for (int i = 0; i < max; i++)
                 {
-                    using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
+                    var index = i;
+                    await Task.Delay(MillisecondsDelay);
+                    tasks.Add(taskFactory.StartNew(async () =>
                     {
+
                         try
                         {
                             var page = index;
@@ -199,11 +199,9 @@ namespace Coflnet.Sky.Updater
                                 Logger.Instance.Error($"Single page ({index}) could not be loaded twice because of {e.Message} {e.StackTrace} {e.InnerException?.Message}");
                             }
                         }
-                        p.Flush(TimeSpan.FromSeconds(10));
-                    }
 
-                }, cancelToken).Unwrap());
-                PrintUpdateEstimate(i, doneCont, sum, updateStartTime, max);
+                    }, cancelToken).Unwrap());
+                    PrintUpdateEstimate(i, doneCont, sum, updateStartTime, max);
 
                 // try to stay under 600MB
                 if (System.GC.GetTotalMemory(false) > 500000000)
@@ -216,6 +214,8 @@ namespace Coflnet.Sky.Updater
 
 
             await Task.WhenAll(tasks);
+                p.Flush(TimeSpan.FromSeconds(10));
+            }
 
             if (AuctionCount.Count > 2)
                 LastAuctionCount = AuctionCount;
@@ -472,16 +472,6 @@ namespace Coflnet.Sky.Updater
             LingerMs = 2
         };
 
-        static Action<DeliveryReport<string, SaveAuction>> handler = r =>
-            {
-                if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
-                    Console.WriteLine(!r.Error.IsError
-                        ? $"Delivered {r.Topic} {r.Offset} "
-                        : $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
-                if (r.Topic == NewAuctionsTopic)
-                    sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
-
-            };
 
         public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd)
         {
@@ -507,7 +497,17 @@ namespace Coflnet.Sky.Updater
                 using var scope = tracer.BuildSpan("FindAuction").StartActive();
                 item.TraceContext = new Tracing.TextMap();
                 tracer.Inject(scope.Span.Context, BuiltinFormats.TextMap, item.TraceContext);
-                p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, handler);
+                var span = tracer.BuildSpan("ProduceAuction").AsChildOf(scope.Span).Start();
+                p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
+                {
+                    if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
+                        Console.WriteLine(!r.Error.IsError
+                            ? $"Delivered {r.Topic} {r.Offset} "
+                            : $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
+                    if (r.Topic == NewAuctionsTopic)
+                        sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
+                    span.Finish();
+                });
             }
         }
 
