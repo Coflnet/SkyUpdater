@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../dev/hypixel.csproj" />
+    <ProjectReference Include="../Hypixel.NET/Hypixel.NET/Hypixel.NET.csproj" />
   </ItemGroup>
 
   <ItemGroup>

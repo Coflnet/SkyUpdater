@@ -109,7 +109,7 @@ namespace Coflnet.Sky.Updater
             LingerMs = 0
         };
 
-        private static async Task ProduceIntoQueue(BazaarPull pull)
+        private static Task ProduceIntoQueue(BazaarPull pull)
         {
             using (var p = new ProducerBuilder<string, BazaarPull>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<BazaarPull>()).Build())
             {
@@ -117,6 +117,8 @@ namespace Coflnet.Sky.Updater
                 {
                     Console.WriteLine("wrote bazaar log " + handler.TopicPartitionOffset.Offset);
                 });
+                p.Flush(TimeSpan.FromSeconds(10));
+                return Task.CompletedTask;
             }
         }
 

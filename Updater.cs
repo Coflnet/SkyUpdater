@@ -504,7 +504,7 @@ namespace Coflnet.Sky.Updater
             var tracer = OpenTracing.Util.GlobalTracer.Instance;
             foreach (var item in auctionsToAdd)
             {
-                var scope = tracer.BuildSpan("FindAuction").StartActive();
+                using var scope = tracer.BuildSpan("FindAuction").StartActive();
                 item.TraceContext = new Tracing.TextMap();
                 tracer.Inject(scope.Span.Context, BuiltinFormats.TextMap, item.TraceContext);
                 p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, handler);
