@@ -117,8 +117,6 @@ namespace Coflnet.Sky.Updater
 
         async Task<DateTime> RunUpdate(DateTime updateStartTime)
         {
-            var binupdate = Task.Run(()
-                => BinUpdater.GrabAuctions(hypixel)).ConfigureAwait(false);
 
             int max = 1;
             var lastUpdate = lastUpdateDone;
@@ -134,15 +132,19 @@ namespace Coflnet.Sky.Updater
             int sum = 0;
             int doneCont = 0;
             object sumloc = new object();
-            var firstPage = await hypixel?.GetAuctionPageAsync(0);
+            var page = updaterIndex * 10;
+            var firstPage = await hypixel?.GetAuctionPageAsync(page);
             max = (int)firstPage.TotalPages;
-            if (firstPage.LastUpdated == updateStartTime)
+            while (firstPage.LastUpdated == updateStartTime)
             {
                 // wait for the server cache to refresh
-                await Task.Delay(1000);
-                return updateStartTime;
+                await Task.Delay(200);
+                firstPage = await hypixel?.GetAuctionPageAsync(page);
             }
             OnNewUpdateStart?.Invoke();
+
+            var binupdate = Task.Run(()
+                => BinUpdater.GrabAuctions(hypixel)).ConfigureAwait(false);
 
             var cancelToken = new CancellationToken();
             AuctionCount = new ConcurrentDictionary<string, int>();
@@ -341,8 +343,8 @@ namespace Coflnet.Sky.Updater
 
         private static async Task WaitForServerCacheRefresh(DateTime hypixelCacheTime)
         {
-            // cache refreshes every 60 seconds, 2 seconds extra to fix timing issues
-            var timeToSleep = hypixelCacheTime.Add(TimeSpan.FromSeconds(62)) - DateTime.Now;
+            // cache refreshes every 60 seconds, delayed by 10, 1 seconds extra to fix timing issues
+            var timeToSleep = hypixelCacheTime.Add(TimeSpan.FromSeconds(71)) - DateTime.Now;
             if (timeToSleep.Seconds > 0)
                 await Task.Delay(timeToSleep);
         }
