@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Coflnet;
@@ -132,7 +133,7 @@ namespace Coflnet.Sky.Updater
             lastUpdate = updateStartTime - new TimeSpan(0, 1, 0);
             DateTime lastHypixelCache = lastUpdate;
 
-            var tasks = new List<Task>();
+            var tasks = new List<ConfiguredTaskAwaitable>();
             int sum = 0;
             int doneCont = 0;
             object sumloc = new object();
@@ -211,7 +212,7 @@ namespace Coflnet.Sky.Updater
                             }
                         }
 
-                    }, cancelToken).Unwrap());
+                    }, cancelToken).Unwrap().ConfigureAwait(false));
                     PrintUpdateEstimate(i, doneCont, sum, updateStartTime, max);
 
                     // try to stay under 600MB
@@ -224,7 +225,9 @@ namespace Coflnet.Sky.Updater
                 }
 
 
-                await Task.WhenAll(tasks);
+                foreach (var item in tasks)
+                    await item;
+
                 p.Flush(TimeSpan.FromSeconds(10));
             }
 
@@ -486,14 +489,14 @@ namespace Coflnet.Sky.Updater
 
         public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, IScope span)
         {
-            ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic,span?.Span?.Context);
+            ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic, span?.Span?.Context);
         }
 
         private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ISpanContext pageSpanContext = null)
         {
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
-                ProduceIntoTopic(auctionsToAdd, targetTopic, p,pageSpanContext);
+                ProduceIntoTopic(auctionsToAdd, targetTopic, p, pageSpanContext);
 
                 // wait for up to 10 seconds for any inflight messages to be delivered.
                 p.Flush(TimeSpan.FromSeconds(10));
