@@ -20,6 +20,7 @@ namespace Coflnet.Sky.Updater
     public class Updater
     {
         private const string LAST_UPDATE_KEY = "lastUpdate";
+        private const int REQUEST_BACKOF_DELAY = 200;
         private static int MillisecondsDelay = Int32.Parse(SimplerConfig.Config.Instance["SLOWDOWN_MS"]);
         private string apiKey;
         private bool abort;
@@ -143,7 +144,7 @@ namespace Coflnet.Sky.Updater
             while (firstPage.LastUpdated == updateStartTime)
             {
                 // wait for the server cache to refresh
-                await Task.Delay(200);
+                await Task.Delay(REQUEST_BACKOF_DELAY);
                 firstPage = await hypixel?.GetAuctionPageAsync(page);
             }
             OnNewUpdateStart?.Invoke();
@@ -173,7 +174,13 @@ namespace Coflnet.Sky.Updater
                                 page = max - i;
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
-                            var res = index != 0 ? await hypixel?.GetAuctionPageAsync(page) : firstPage;
+                            GetAuctionPage res =  index != 0 ? await hypixel?.GetAuctionPageAsync(page) : firstPage;
+                            while (res == null || res.LastUpdated == updateStartTime)
+                            {
+                                // tripple the backoff because these will be more
+                                await Task.Delay(REQUEST_BACKOF_DELAY * 3);
+                                res = await hypixel?.GetAuctionPageAsync(page);
+                            }
                             if (res == null)
                                 return;
 
@@ -383,9 +390,9 @@ namespace Coflnet.Sky.Updater
                 processed = res.Auctions.Where(item =>
                     {
                         activeUuids[item.Uuid] = true;
-                    // nothing changed if the last bid is older than the last update
-                    return !(item.Bids.Count > 0 && item.Bids[item.Bids.Count - 1].Timestamp < lastUpdate ||
-                            item.Bids.Count == 0 && item.Start < lastUpdate) || doFullUpdate;
+                        // nothing changed if the last bid is older than the last update
+                        return !(item.Bids.Count > 0 && item.Bids[item.Bids.Count - 1].Timestamp < lastUpdate ||
+                                item.Bids.Count == 0 && item.Start < lastUpdate) || doFullUpdate;
                     })
                     .Select(a =>
                     {
