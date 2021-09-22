@@ -377,27 +377,32 @@ namespace Coflnet.Sky.Updater
         Task<int> Save(GetAuctionPage res, DateTime lastUpdate, ConcurrentDictionary<string, bool> activeUuids, IProducer<string, SaveAuction> p, ISpanContext pageSpanContext)
         {
             int count = 0;
-
-            var processed = res.Auctions.Where(item =>
-                {
-                    activeUuids[item.Uuid] = true;
+            List<SaveAuction> processed = new List<SaveAuction>();
+            using (var span = GlobalTracer.Instance.BuildSpan("parsePage").AsChildOf(pageSpanContext).StartActive())
+            {
+                processed = res.Auctions.Where(item =>
+                    {
+                        activeUuids[item.Uuid] = true;
                     // nothing changed if the last bid is older than the last update
                     return !(item.Bids.Count > 0 && item.Bids[item.Bids.Count - 1].Timestamp < lastUpdate ||
-                        item.Bids.Count == 0 && item.Start < lastUpdate) || doFullUpdate;
-                })
-                .Select(a =>
-                {
-                    extractor.AddOrIgnoreDetails(a);
-                    count++;
-                    var auction = ConvertAuction(a);
-                    return auction;
-                }).ToList();
+                            item.Bids.Count == 0 && item.Start < lastUpdate) || doFullUpdate;
+                    })
+                    .Select(a =>
+                    {
+                        extractor.AddOrIgnoreDetails(a);
+                        count++;
+                        var auction = ConvertAuction(a);
+                        return auction;
+                    }).ToList();
+            }
+
 
             // prioritise the flipper
             var started = processed.Where(a => a.Start > lastUpdate).ToList();
             var min = DateTime.Now - TimeSpan.FromMinutes(15);
             //AddToFlipperCheckQueue(started.Where(a => a.Start > min));
             newAuctions.Inc(started.Count());
+
             ProduceIntoTopic(started, NewAuctionsTopic, p, pageSpanContext);
             ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids[item.Bids.Count - 1].Timestamp > lastUpdate), NewBidsTopic, p, pageSpanContext);
 
