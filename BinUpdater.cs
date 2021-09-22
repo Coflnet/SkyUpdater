@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using hypixel;
 using Hypixel.NET;
+using OpenTracing.Util;
 
 namespace Coflnet.Sky.Updater
 {
@@ -41,6 +42,7 @@ namespace Coflnet.Sky.Updater
 
         public static void GrabAuctions(HypixelApi hypixelApi)
         {
+            using var span = GlobalTracer.Instance.BuildSpan("SoldAuctions").StartActive();
             var expired = hypixelApi.getAuctionsEnded();
             var auctions = expired.Auctions.Select(item =>
             {
@@ -68,7 +70,7 @@ namespace Coflnet.Sky.Updater
                 return a;
             }).ToList();
             SoldLastMin = auctions;
-            Updater.AddSoldAuctions(auctions);
+            Updater.AddSoldAuctions(auctions, span);
 
             Console.WriteLine($"Updated {expired.Auctions.Count} bin sells eg {expired.Auctions.FirstOrDefault()?.Uuid}");
         }

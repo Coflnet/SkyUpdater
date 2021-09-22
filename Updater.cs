@@ -10,7 +10,9 @@ using dev;
 using hypixel;
 using Hypixel.NET;
 using Hypixel.NET.SkyblockApi;
+using OpenTracing;
 using OpenTracing.Propagation;
+using OpenTracing.Util;
 
 namespace Coflnet.Sky.Updater
 {
@@ -118,6 +120,8 @@ namespace Coflnet.Sky.Updater
         async Task<DateTime> RunUpdate(DateTime updateStartTime)
         {
 
+            var tracer = GlobalTracer.Instance;
+            using var updateScope = tracer.BuildSpan("RunUpdate").StartActive();
             int max = 1;
             var lastUpdate = lastUpdateDone;
 
@@ -159,7 +163,8 @@ namespace Coflnet.Sky.Updater
                     await Task.Delay(MillisecondsDelay);
                     tasks.Add(taskFactory.StartNew(async () =>
                     {
-
+                        var tracer = GlobalTracer.Instance;
+                        using var scope = tracer.BuildSpan("LoadPage").WithTag("page", i).StartActive();
                         try
                         {
                             var page = index;
@@ -180,7 +185,11 @@ namespace Coflnet.Sky.Updater
                                 Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
                             }
 
-                            var val = await Save(res, lastUpdate, activeUuids, p);
+                            var val = await Save(res, lastUpdate, activeUuids, p, scope.Span.Context);
+                            scope.Span.SetTag("lastUpdated", res.LastUpdated.ToString());
+                            if (res.LastUpdated == updateStartTime)
+                                scope.Span.SetTag("notUpdated", true);
+                            scope.Span.Log($"Loaded {val}");
                             lock (sumloc)
                             {
                                 sum += val;
@@ -194,7 +203,7 @@ namespace Coflnet.Sky.Updater
                             try // again
                             {
                                 var res = await hypixel?.GetAuctionPageAsync(index);
-                                var val = await Save(res, lastUpdate, activeUuids, p);
+                                var val = await Save(res, lastUpdate, activeUuids, p, scope.Span.Context);
                             }
                             catch (System.Exception)
                             {
@@ -205,17 +214,17 @@ namespace Coflnet.Sky.Updater
                     }, cancelToken).Unwrap());
                     PrintUpdateEstimate(i, doneCont, sum, updateStartTime, max);
 
-                // try to stay under 600MB
-                if (System.GC.GetTotalMemory(false) > 500000000)
-                {
-                    Console.Write("\t mem: " + System.GC.GetTotalMemory(false));
-                    System.GC.Collect();
+                    // try to stay under 600MB
+                    if (System.GC.GetTotalMemory(false) > 500000000)
+                    {
+                        Console.Write("\t mem: " + System.GC.GetTotalMemory(false));
+                        System.GC.Collect();
+                    }
+                    //await Task.Delay(100);
                 }
-                //await Task.Delay(100);
-            }
 
 
-            await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks);
                 p.Flush(TimeSpan.FromSeconds(10));
             }
 
@@ -362,7 +371,7 @@ namespace Coflnet.Sky.Updater
 
         // builds the index for all auctions in the last hour
 
-        Task<int> Save(GetAuctionPage res, DateTime lastUpdate, ConcurrentDictionary<string, bool> activeUuids, IProducer<string, SaveAuction> p)
+        Task<int> Save(GetAuctionPage res, DateTime lastUpdate, ConcurrentDictionary<string, bool> activeUuids, IProducer<string, SaveAuction> p, ISpanContext pageSpanContext)
         {
             int count = 0;
 
@@ -386,8 +395,8 @@ namespace Coflnet.Sky.Updater
             var min = DateTime.Now - TimeSpan.FromMinutes(15);
             //AddToFlipperCheckQueue(started.Where(a => a.Start > min));
             newAuctions.Inc(started.Count());
-            ProduceIntoTopic(started, NewAuctionsTopic, p);
-            ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids[item.Bids.Count - 1].Timestamp > lastUpdate), NewBidsTopic, p);
+            ProduceIntoTopic(started, NewAuctionsTopic, p, pageSpanContext);
+            ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids[item.Bids.Count - 1].Timestamp > lastUpdate), NewBidsTopic, p, pageSpanContext);
 
 
             if (DateTime.Now.Minute % 30 == 7)
@@ -404,7 +413,7 @@ namespace Coflnet.Sky.Updater
                 }
 
             var ended = res.Auctions.Where(a => a.End < DateTime.Now).Select(ConvertAuction);
-            ProduceIntoTopic(ended, AuctionEndedTopic, p);
+            ProduceIntoTopic(ended, AuctionEndedTopic, p, pageSpanContext);
 
             auctionUpdateCount.Inc(count);
 
@@ -475,31 +484,38 @@ namespace Coflnet.Sky.Updater
         };
 
 
-        public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd)
+        public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, IScope span)
         {
-            ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic);
+            ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic,span?.Span?.Context);
         }
 
-        private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic)
+        private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ISpanContext pageSpanContext = null)
         {
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
-                ProduceIntoTopic(auctionsToAdd, targetTopic, p);
+                ProduceIntoTopic(auctionsToAdd, targetTopic, p,pageSpanContext);
 
                 // wait for up to 10 seconds for any inflight messages to be delivered.
                 p.Flush(TimeSpan.FromSeconds(10));
             }
         }
 
-        private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, Confluent.Kafka.IProducer<string, hypixel.SaveAuction> p)
+        private static void ProduceIntoTopic(
+            IEnumerable<SaveAuction> auctionsToAdd,
+            string targetTopic,
+            Confluent.Kafka.IProducer<string, hypixel.SaveAuction> p,
+            ISpanContext pageSpanContext = null)
         {
             var tracer = OpenTracing.Util.GlobalTracer.Instance;
             foreach (var item in auctionsToAdd)
             {
-                using var scope = tracer.BuildSpan("FindAuction").StartActive();
+                var builder = tracer.BuildSpan("Produce").WithTag("topic", targetTopic);
+                if (pageSpanContext != null)
+                    builder = builder.AsChildOf(pageSpanContext);
+                var span = builder.Start();
+
                 item.TraceContext = new Tracing.TextMap();
-                tracer.Inject(scope.Span.Context, BuiltinFormats.TextMap, item.TraceContext);
-                var span = tracer.BuildSpan("ProduceAuction").AsChildOf(scope.Span).Start();
+                tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
                 p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
                 {
                     if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
