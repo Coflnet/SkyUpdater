@@ -93,7 +93,7 @@ namespace Coflnet.Sky.Updater
             try
             {
                 if (hypixel == null)
-                    hypixel = new HypixelApi(apiKey, 50);
+                    hypixel = new HypixelApi(apiKey, 1);
 
                 if (lastUpdateDone == default(DateTime))
                     lastUpdateDone = await CacheService.Instance.GetFromRedis<DateTime>(LAST_UPDATE_KEY);
@@ -159,19 +159,19 @@ namespace Coflnet.Sky.Updater
 
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
-                for (int i = 0; i < max; i++)
+                for (int loopIndexNotUse = 0; loopIndexNotUse < max; loopIndexNotUse++)
                 {
-                    var index = i;
+                    var index = loopIndexNotUse;
                     await Task.Delay(MillisecondsDelay);
                     tasks.Add(taskFactory.StartNew(async () =>
                     {
                         var tracer = GlobalTracer.Instance;
-                        using var scope = tracer.BuildSpan("LoadPage").WithTag("page", i).StartActive();
+                        using var scope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive();
                         try
                         {
                             var page = index;
                             if (updaterIndex == 1)
-                                page = max - i;
+                                page = max - index;
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
                             GetAuctionPage res =  index != 0 ? await hypixel?.GetAuctionPageAsync(page) : firstPage;
@@ -220,7 +220,7 @@ namespace Coflnet.Sky.Updater
                         }
 
                     }, cancelToken).Unwrap().ConfigureAwait(false));
-                    PrintUpdateEstimate(i, doneCont, sum, updateStartTime, max);
+                    PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
 
                     // try to stay under 600MB
                     if (System.GC.GetTotalMemory(false) > 500000000)
