@@ -170,16 +170,24 @@ namespace Coflnet.Sky.Updater
                         try
                         {
                             var page = index;
+
                             if (updaterIndex == 1)
                                 page = max - index;
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
-                            GetAuctionPage res =  index != 0 ? await hypixel?.GetAuctionPageAsync(page) : firstPage;
+                            GetAuctionPage res;
+                            using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
+                            {
+                                res = index != 0 ? await hypixel?.GetAuctionPageAsync(page) : firstPage;
+                            }
                             while (res == null || res.LastUpdated == updateStartTime)
                             {
                                 // tripple the backoff because these will be more
                                 await Task.Delay(REQUEST_BACKOF_DELAY * 3);
-                                res = await hypixel?.GetAuctionPageAsync(page);
+                                using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
+                                {
+                                    res = await hypixel?.GetAuctionPageAsync(page);
+                                }
                             }
                             if (res == null)
                                 return;

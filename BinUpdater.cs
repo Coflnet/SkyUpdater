@@ -66,7 +66,9 @@ namespace Coflnet.Sky.Updater
                     UId = AuctionService.Instance.GetId(item.Uuid)
                 };
 
-                NBT.FillDetails(a, item.ItemBytes);
+                NBT.FillDetails(a, item.ItemBytes,true);
+                if(a.Tier == Tier.UNKNOWN)
+                    Console.WriteLine(NBT.Pretty(item.ItemBytes));
                 return a;
             }).ToList();
             SoldLastMin = auctions;
