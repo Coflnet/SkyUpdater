@@ -3,17 +3,19 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Coflnet;
+using Coflnet.Sky.Updater.Models;
 using Confluent.Kafka;
 using dev;
 using hypixel;
 using Hypixel.NET;
-using Hypixel.NET.SkyblockApi;
 using OpenTracing;
 using OpenTracing.Propagation;
 using OpenTracing.Util;
+using RestSharp;
 
 namespace Coflnet.Sky.Updater
 {
@@ -23,6 +25,7 @@ namespace Coflnet.Sky.Updater
         private const int REQUEST_BACKOF_DELAY = 200;
         private static int MillisecondsDelay = Int32.Parse(SimplerConfig.Config.Instance["SLOWDOWN_MS"]);
         private string apiKey;
+        private HypixelApi apiClient;
         private bool abort;
         private static bool minimumOutput;
 
@@ -70,11 +73,12 @@ namespace Coflnet.Sky.Updater
         /// Limited task factory
         /// </summary>
         TaskFactory taskFactory;
-        private HypixelApi hypixel;
+
 
         public Updater(string apiKey)
         {
             this.apiKey = apiKey;
+            this.apiClient = new Hypixel.NET.HypixelApi(apiKey, 1);
 
             var scheduler = new LimitedConcurrencyLevelTaskScheduler(3);
             taskFactory = new TaskFactory(scheduler);
@@ -92,9 +96,6 @@ namespace Coflnet.Sky.Updater
 
             try
             {
-                if (hypixel == null)
-                    hypixel = new HypixelApi(apiKey, 1);
-
                 if (lastUpdateDone == default(DateTime))
                     lastUpdateDone = await CacheService.Instance.GetFromRedis<DateTime>(LAST_UPDATE_KEY);
 
@@ -128,7 +129,6 @@ namespace Coflnet.Sky.Updater
             var lastUpdate = lastUpdateDone;
 
             TimeSpan timeEst = new TimeSpan(0, 1, 1);
-            Console.WriteLine($"Updating Data {DateTime.Now}");
 
             // add extra miniute to start to catch lost auctions
             lastUpdate = updateStartTime - new TimeSpan(0, 1, 0);
@@ -139,23 +139,27 @@ namespace Coflnet.Sky.Updater
             int doneCont = 0;
             object sumloc = new object();
             var page = updaterIndex * 10;
-            var firstPage = await hypixel?.GetAuctionPageAsync(page);
+
+            var firstPage = await LoadPage(page).ConfigureAwait(false);
+            Console.WriteLine($"Updating Data {DateTime.Now} " + firstPage.WasSuccessful);
+
             max = (int)firstPage.TotalPages;
             while (firstPage.LastUpdated == updateStartTime)
             {
                 // wait for the server cache to refresh
                 await Task.Delay(REQUEST_BACKOF_DELAY);
-                firstPage = await hypixel?.GetAuctionPageAsync(page);
+                firstPage = await LoadPage(page).ConfigureAwait(false);
             }
             OnNewUpdateStart?.Invoke();
 
             var binupdate = Task.Run(()
-                => BinUpdater.GrabAuctions(hypixel)).ConfigureAwait(false);
+                => BinUpdater.GrabAuctions(apiClient)).ConfigureAwait(false);
 
             var cancelToken = new CancellationToken();
             AuctionCount = new ConcurrentDictionary<string, int>();
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
+            Console.WriteLine("loading total pages " + max);
 
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
@@ -175,10 +179,10 @@ namespace Coflnet.Sky.Updater
                                 page = max - index;
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
-                            GetAuctionPage res;
+                            AuctionPage res;
                             using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                             {
-                                res = index != 0 ? await hypixel?.GetAuctionPageAsync(page) : firstPage;
+                                res = index != 0 ? await LoadPage(page).ConfigureAwait(false) : firstPage;
                             }
                             while (res == null || res.LastUpdated == updateStartTime)
                             {
@@ -186,7 +190,7 @@ namespace Coflnet.Sky.Updater
                                 await Task.Delay(REQUEST_BACKOF_DELAY * 3);
                                 using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                                 {
-                                    res = await hypixel?.GetAuctionPageAsync(page);
+                                    res = await LoadPage(page).ConfigureAwait(false);
                                 }
                             }
                             if (res == null)
@@ -218,7 +222,7 @@ namespace Coflnet.Sky.Updater
                         {
                             try // again
                             {
-                                var res = await hypixel?.GetAuctionPageAsync(index);
+                                var res = await LoadPage(page).ConfigureAwait(false);
                                 var val = await Save(res, lastUpdate, activeUuids, p, scope.Span.Context);
                             }
                             catch (System.Exception)
@@ -267,6 +271,16 @@ namespace Coflnet.Sky.Updater
             OnNewUpdateEnd?.Invoke();
 
             return lastHypixelCache;
+        }
+
+        private static async Task<AuctionPage> LoadPage(int page)
+        {
+            var client = new RestClient("https://api.hypixel.net/skyblock");
+            var request = new RestRequest($"auctions?page={page}", Method.GET);
+            //Get the response and Deserialize
+
+            var response = await client.ExecuteAsync(request).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<AuctionPage>(response.Content);
         }
 
         /// <summary>
@@ -389,7 +403,7 @@ namespace Coflnet.Sky.Updater
 
         // builds the index for all auctions in the last hour
 
-        Task<int> Save(GetAuctionPage res, DateTime lastUpdate, ConcurrentDictionary<string, bool> activeUuids, IProducer<string, SaveAuction> p, ISpanContext pageSpanContext)
+        Task<int> Save(AuctionPage res, DateTime lastUpdate, ConcurrentDictionary<string, bool> activeUuids, IProducer<string, SaveAuction> p, ISpanContext pageSpanContext)
         {
             int count = 0;
             List<SaveAuction> processed = new List<SaveAuction>();

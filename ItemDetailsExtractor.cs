@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Coflnet.Sky.Updater.Models;
 using dev;
 using hypixel;
-using Hypixel.NET.SkyblockApi;
 using Newtonsoft.Json;
 using static hypixel.ItemDetails;
 
