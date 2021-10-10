@@ -18,7 +18,7 @@ namespace Coflnet.Sky.Updater.Models
         public long Amount { get; set; }
 
         [JsonPropertyName("timestamp")]
-        private readonly long _timestamp;
+        public long _timestamp { get; set; }
         public DateTime Timestamp
         {
             get

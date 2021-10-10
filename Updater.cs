@@ -421,9 +421,13 @@ namespace Coflnet.Sky.Updater
                         extractor.AddOrIgnoreDetails(a);
                         count++;
                         var auction = ConvertAuction(a);
+                        if(auction.Bids.Count > 0 && auction.Bids.Max(b=>b.Timestamp) > lastUpdate)
+                            Console.WriteLine("top time " + auction.Bids.Max(b=>b.Timestamp));
+                            
                         return auction;
                     }).ToList();
             }
+            Console.WriteLine(lastUpdate);
 
 
             // prioritise the flipper
@@ -433,7 +437,8 @@ namespace Coflnet.Sky.Updater
             newAuctions.Inc(started.Count());
 
             ProduceIntoTopic(started, NewAuctionsTopic, p, pageSpanContext);
-            ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids[item.Bids.Count - 1].Timestamp > lastUpdate), NewBidsTopic, p, pageSpanContext);
+            ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids.Max(b=>b.Timestamp) > lastUpdate), NewBidsTopic, p, pageSpanContext);
+            
 
 
             if (DateTime.Now.Minute % 30 == 7)
