@@ -161,7 +161,11 @@ namespace Coflnet.Sky.Updater
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
             Console.WriteLine("loading total pages " + max);
-            var sumary = new AhStateSumary();
+            var sumary = new AhStateSumary()
+            {
+                ActiveAuctions = new ConcurrentDictionary<long, byte>(),
+                ItemCount = new ConcurrentDictionary<string, short>()
+            };
 
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
