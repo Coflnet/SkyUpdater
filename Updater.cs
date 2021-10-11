@@ -279,6 +279,7 @@ namespace Coflnet.Sky.Updater
             if (updaterIndex == 0)
                 using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
                 {
+                    Console.WriteLine("delivering sumary");
                     p.Produce(AuctionSumary, new Message<string, AhStateSumary> { Value = sumary, Key = "" }, r =>
                     {
                         if (r.Error.IsError || r.TopicPartitionOffset.Offset % 100 == 10)
