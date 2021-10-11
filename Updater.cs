@@ -276,7 +276,7 @@ namespace Coflnet.Sky.Updater
             Console.WriteLine($"Updated {sum} auctions {doneCont} pages");
             UpdateSize = sum;
 
-            if (updaterIndex == 0 || updaterIndex == 1)
+            if (updaterIndex == 0)
                 using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
                 {
                     p.Produce(AuctionSumary, new Message<string, AhStateSumary> { Value = sumary, Key = "" }, r =>
@@ -286,6 +286,7 @@ namespace Coflnet.Sky.Updater
                                 ? $"Delivered {r.Topic} {r.Offset} "
                                 : $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
                     });
+                    p.Flush(TimeSpan.FromSeconds(10));
                 }
 
 
@@ -444,9 +445,6 @@ namespace Coflnet.Sky.Updater
                         return auction;
                     }).ToList();
             }
-            Console.WriteLine(lastUpdate);
-
-
             // prioritise the flipper
             var started = processed.Where(a => a.Start > lastUpdate).ToList();
             var min = DateTime.Now - TimeSpan.FromMinutes(15);
