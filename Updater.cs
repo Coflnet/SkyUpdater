@@ -161,11 +161,7 @@ namespace Coflnet.Sky.Updater
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
             Console.WriteLine("loading total pages " + max);
-            var sumary = new AhStateSumary()
-            {
-                ActiveAuctions = new ConcurrentDictionary<long, byte>(),
-                ItemCount = new ConcurrentDictionary<string, short>()
-            };
+            var sumary = new AhStateSumary();
 
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
@@ -280,6 +276,7 @@ namespace Coflnet.Sky.Updater
                 using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
                 {
                     Console.WriteLine("delivering sumary");
+                    sumary.Time = DateTime.Now;
                     p.Produce(AuctionSumary, new Message<string, AhStateSumary> { Value = sumary, Key = "" }, r =>
                     {
                         if (r.Error.IsError || r.TopicPartitionOffset.Offset % 100 == 10)
