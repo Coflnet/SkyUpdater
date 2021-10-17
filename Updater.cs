@@ -375,7 +375,7 @@ namespace Coflnet.Sky.Updater
             {
                 minimumOutput = true;
                 var updaterStart = DateTime.Now.RoundDown(TimeSpan.FromMinutes(1));
-                if (updaterIndex > 2)
+                if (updaterIndex >= 2)
                 {
                     await new NewUpdater().DoUpdates(updaterIndex - 2, token);
                     return;

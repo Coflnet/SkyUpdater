@@ -30,50 +30,50 @@ namespace Coflnet.Sky.Updater
                 using var span = tracer.BuildSpan("FastUpdate").StartActive();
                 try
                 {
-                    using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build())
-                    {
-                        var tasks = new List<ConfiguredTaskAwaitable>();
-                        var waitTime = lastUpdate + TimeSpan.FromSeconds(70) - DateTime.Now;
-                        if (waitTime < TimeSpan.FromSeconds(0))
-                            waitTime = TimeSpan.FromSeconds(0);
-                        await Task.Delay(waitTime);
-                        for (int i = 0; i < 9; i++)
-                        {
-                            var page = index + i * 10;
-                            tasks.Add(Task.Run(async () =>
-                            {
-                                try
-                                {
-                                    using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
-                                    var time = await GetAndSavePage(page, p, lastUpdate);
-                                    if (page < 10)
-                                        lastUpdate = time;
+                    using var p = GetProducer();
 
-                                }
-                                catch (HttpRequestException e)
-                                {
-                                    Console.WriteLine("could not get page " + page);
-                                }
-                                catch (Exception e)
-                                {
-                                    dev.Logger.Instance.Error(e, "update page " + page + e.GetType().Name);
-                                }
-                            }).ConfigureAwait(false));
-                        }
-                        foreach (var item in tasks)
+                    var tasks = new List<ConfiguredTaskAwaitable>();
+                    var waitTime = lastUpdate + TimeSpan.FromSeconds(70) - DateTime.Now;
+                    if (waitTime < TimeSpan.FromSeconds(0))
+                        waitTime = TimeSpan.FromSeconds(0);
+                    await Task.Delay(waitTime);
+                    for (int i = 0; i < 9; i++)
+                    {
+                        var page = index + i * 10;
+                        tasks.Add(Task.Run(async () =>
                         {
-                            await item;
-                        }
-                        // wait for up to 10 seconds for any inflight messages to be delivered.
-                        p.Flush(TimeSpan.FromSeconds(10));
+                            try
+                            {
+                                using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
+                                var time = await GetAndSavePage(page, p, lastUpdate);
+                                if (page < 10)
+                                    lastUpdate = time;
+
+                            }
+                            catch (HttpRequestException e)
+                            {
+                                Console.WriteLine("could not get page " + page);
+                            }
+                            catch (Exception e)
+                            {
+                                dev.Logger.Instance.Error(e, "update page " + page + e.GetType().Name);
+                            }
+                        }).ConfigureAwait(false));
                     }
+                    foreach (var item in tasks)
+                    {
+                        await item;
+                    }
+                    // wait for up to 10 seconds for any inflight messages to be delivered.
+                    p.Flush(TimeSpan.FromSeconds(10));
+
                     var client = new HttpClient();
                     var response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index);
                     foreach (var item in response.Headers)
                     {
                         Console.WriteLine(item.Key + " " + item.Value);
                     }
-                    response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index + new Random().Next(1,9));
+                    response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index + new Random().Next(1, 9));
                     foreach (var item in response.Headers)
                     {
                         Console.WriteLine(item.Key + " " + item.Value);
@@ -90,6 +90,11 @@ namespace Coflnet.Sky.Updater
                 }
             }
 
+        }
+
+        protected virtual IProducer<string, SaveAuction> GetProducer()
+        {
+            return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build();
         }
 
         private async Task<DateTime> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate)
