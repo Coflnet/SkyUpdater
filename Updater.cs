@@ -43,7 +43,7 @@ namespace Coflnet.Sky.Updater
 
         static Prometheus.HistogramConfiguration buckets = new Prometheus.HistogramConfiguration()
         {
-            Buckets = Prometheus.Histogram.LinearBuckets(start: 0, width: 2, count: 10)
+            Buckets = Prometheus.Histogram.LinearBuckets(start: 8, width: 2, count: 10)
         };
         static Prometheus.Histogram sendingTime = Prometheus.Metrics.CreateHistogram("timeToSending", "The time from api Update to sending. (should be close to 10)",
             buckets);
