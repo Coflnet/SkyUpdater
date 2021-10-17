@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -69,15 +70,10 @@ namespace Coflnet.Sky.Updater
 
                     var client = new HttpClient();
                     var response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index);
-                    foreach (var item in response.Headers)
-                    {
-                        Console.WriteLine(item.Key + " " + item.Value);
-                    }
+                    Console.WriteLine($"Age: {response.Headers.Where(a=>a.Key == "Age").Select(a=>a.Value).FirstOrDefault()?.FirstOrDefault()}");
                     response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index + new Random().Next(1, 9));
-                    foreach (var item in response.Headers)
-                    {
-                        Console.WriteLine(item.Key + " " + item.Value);
-                    }
+                    Console.WriteLine($"Age: {response.Headers.Where(a=>a.Key == "Age").Select(a=>a.Value).FirstOrDefault()?.FirstOrDefault()}");
+                   
 
 
                     var time = lastUpdate + TimeSpan.FromSeconds(68) - DateTime.Now;
