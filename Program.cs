@@ -19,12 +19,19 @@ namespace Coflnet.Sky.Updater
             var updater = new Updater(apiKey);
             FileController.dataPaht = "/data";
             var loading = hypixel.ItemDetails.Instance.LoadFromDB();
+
+            if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
+                Updater.updaterIndex = 0;
+            else
+            {
+                bazzar.UpdateForEver(apiKey);
+            }
             updater.UpdateForEver();
-            bazzar.UpdateForEver(apiKey);
             try
             {
                 loading.Wait();
-            } catch(Exception e)
+            }
+            catch (Exception e)
             {
                 Console.WriteLine("-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|");
                 Console.WriteLine($"Failed to load items {e.Message}\n {e.StackTrace}");

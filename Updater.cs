@@ -33,7 +33,7 @@ namespace Coflnet.Sky.Updater
 
         private static string MissingAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:MISSING_AUCTION"];
         private static string SoldAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:SOLD_AUCTION"];
-        private static string NewAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_AUCTION"];
+        public static readonly string NewAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_AUCTION"];
         private static string AuctionEndedTopic = SimplerConfig.Config.Instance["TOPICS:AUCTION_ENDED"];
         private static string NewBidsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_BID"];
         private static string AuctionSumary = SimplerConfig.Config.Instance["TOPICS:AH_SUMARY"];
@@ -45,13 +45,13 @@ namespace Coflnet.Sky.Updater
         {
             Buckets = Prometheus.Histogram.LinearBuckets(start: 0, width: 2, count: 10)
         };
-        static Prometheus.Histogram sendingTime = Prometheus.Metrics.CreateHistogram("timeToSending", "The time from deserialising to sending. (should be close to 0)",
+        static Prometheus.Histogram sendingTime = Prometheus.Metrics.CreateHistogram("timeToSending", "The time from api Update to sending. (should be close to 10)",
             buckets);
 
         /// <summary>
         /// Index of the updater (if there are multiple updating is split amongst them)
         /// </summary>
-        private static int updaterIndex;
+        public static int updaterIndex;
 
         public event Action OnNewUpdateStart;
         /// <summary>
@@ -375,7 +375,11 @@ namespace Coflnet.Sky.Updater
             {
                 minimumOutput = true;
                 var updaterStart = DateTime.Now.RoundDown(TimeSpan.FromMinutes(1));
-                Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out updaterIndex);
+                if (updaterIndex > 2)
+                {
+                    await new NewUpdater().DoUpdates(updaterIndex - 2, token);
+                    return;
+                }
                 Console.WriteLine("Starting updater with index " + updaterIndex);
                 while (true)
                 {
@@ -437,7 +441,7 @@ namespace Coflnet.Sky.Updater
                 })
                     .Select(a =>
                     {
-                        var auction = ConvertAuction(a);
+                        var auction = ConvertAuction(a, res.LastUpdated);
                         if (auction.Start > lastUpdate)
                             ProduceIntoTopic(new SaveAuction[] { auction }, NewAuctionsTopic, p, pageSpanContext);
                         return auction;
@@ -492,11 +496,16 @@ namespace Coflnet.Sky.Updater
             return count;
         }
 
-        private static SaveAuction ConvertAuction(Auction auction)
+        public static SaveAuction ConvertAuction(Auction auction)
+        {
+            return ConvertAuction(auction, default);
+        }
+
+        public static SaveAuction ConvertAuction(Auction auction, DateTime apiUpdate)
         {
             var a = new SaveAuction()
             {
-                ClaimedBids = auction.ClaimedBidders.Select(s => new UuId((string)s)).ToList(),
+                ClaimedBids = auction.ClaimedBidders?.Select(s => new UuId((string)s))?.ToList(),
                 Claimed = auction.Claimed,
                 //ItemBytes = auction.ItemBytes;
                 StartingBid = auction.StartingBid,
@@ -516,17 +525,18 @@ namespace Coflnet.Sky.Updater
                 UId = AuctionService.Instance.GetId(auction.Uuid),
             };
 
-            foreach (var bid in auction.Bids)
-            {
-                a.Bids.Add(new SaveBids()
+            if (auction.Bids != null)
+                foreach (var bid in auction?.Bids)
                 {
-                    AuctionId = bid.AuctionId.Substring(0, 5),
-                    Bidder = bid.Bidder,
-                    ProfileId = bid.ProfileId == bid.Bidder ? null : bid.ProfileId,
-                    Amount = bid.Amount,
-                    Timestamp = bid.Timestamp
-                });
-            }
+                    a.Bids.Add(new SaveBids()
+                    {
+                        AuctionId = bid.AuctionId.Substring(0, 5),
+                        Bidder = bid.Bidder,
+                        ProfileId = bid.ProfileId == bid.Bidder ? null : bid.ProfileId,
+                        Amount = bid.Amount,
+                        Timestamp = bid.Timestamp
+                    });
+                }
             NBT.FillDetails(a, auction.ItemBytes);
             if (Enum.TryParse(auction.Tier, true, out Tier tier))
                 a.Tier = tier;
@@ -536,6 +546,9 @@ namespace Coflnet.Sky.Updater
                 a.Category = category;
             else
                 a.OldCategory = auction.Category;
+
+            if (apiUpdate != default)
+                a.FindTime = apiUpdate;
 
             return a;
         }
@@ -588,17 +601,22 @@ namespace Coflnet.Sky.Updater
 
                 item.TraceContext = new Tracing.TextMap();
                 tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
-                p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
-                {
-                    if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
-                        Console.WriteLine(!r.Error.IsError
-                            ? $"Delivered {r.Topic} {r.Offset} "
-                            : $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
-                    if (r.Topic == NewAuctionsTopic)
-                        sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
-                    span.Finish();
-                });
+                ProduceIntoTopic(targetTopic, p, item, span);
             }
+        }
+
+        public static void ProduceIntoTopic(string targetTopic, IProducer<string, SaveAuction> p, SaveAuction item, ISpan span)
+        {
+            p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
+            {
+                if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
+                    Console.WriteLine(!r.Error.IsError
+                        ? $"Delivered {r.Topic} {r.Offset} "
+                        : $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
+                if (r.Topic == NewAuctionsTopic)
+                    sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
+                span.Finish();
+            });
         }
 
         public static void AddToFlipperCheckQueue(IEnumerable<SaveAuction> auctionsToAdd)
