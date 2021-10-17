@@ -67,13 +67,13 @@ namespace Coflnet.Sky.Updater
                     }
                     // wait for up to 10 seconds for any inflight messages to be delivered.
                     p.Flush(TimeSpan.FromSeconds(10));
-
+                    /*
                     var client = new HttpClient();
                     var response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index);
                     Console.WriteLine($"Age: {response.Headers.Where(a=>a.Key == "Age").Select(a=>a.Value).FirstOrDefault()?.FirstOrDefault()}");
                     response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index + new Random().Next(1, 9));
                     Console.WriteLine($"Age: {response.Headers.Where(a=>a.Key == "Age").Select(a=>a.Value).FirstOrDefault()?.FirstOrDefault()}");
-                   
+                   */
 
 
                     var time = lastUpdate + TimeSpan.FromSeconds(68) - DateTime.Now;
