@@ -46,7 +46,7 @@ namespace Coflnet.Sky.Updater
                             try
                             {
                                 using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
-                                var time = await GetAndSavePage(page, p, lastUpdate);
+                                var time = await GetAndSavePage(page, p, lastUpdate,siteSpan);
                                 if (page < 10)
                                     lastUpdate = time;
 
@@ -93,7 +93,7 @@ namespace Coflnet.Sky.Updater
             return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build();
         }
 
-        private async Task<DateTime> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate)
+        private async Task<DateTime> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan)
         {
             var httpClient = new HttpClient();
             var time = lastUpdate.ToUnix() * 1000;
@@ -134,6 +134,10 @@ namespace Coflnet.Sky.Updater
                             auction.BuyItNow = true;
                         try
                         {
+                            if(count == 0)
+                            {
+                                using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("FastUpdate").AsChildOf(siteSpan.Span).StartActive();
+                            }
                             Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), null);
                         }
                         catch (Exception e)
