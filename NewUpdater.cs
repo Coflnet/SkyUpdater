@@ -101,7 +101,7 @@ namespace Coflnet.Sky.Updater
             var count = 0;
             while (page.LastUpdated <= lastUpdate)
             {
-                using var document = await JsonDocument.ParseAsync(await httpClient.GetStreamAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId)).ConfigureAwait(false);
+                using var document = await JsonDocument.ParseAsync(await httpClient.GetStreamAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId));
                 var root = document.RootElement;
                 page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
                 if (page.LastUpdated <= lastUpdate)
@@ -136,7 +136,7 @@ namespace Coflnet.Sky.Updater
                         {
                             if(count == 0)
                             {
-                                using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("FastUpdate").AsChildOf(siteSpan.Span).StartActive();
+                                using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).StartActive();
                             }
                             Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), null);
                         }
