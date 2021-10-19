@@ -592,13 +592,17 @@ namespace Coflnet.Sky.Updater
             var tracer = OpenTracing.Util.GlobalTracer.Instance;
             foreach (var item in auctionsToAdd)
             {
-                var builder = tracer.BuildSpan("Produce").WithTag("topic", targetTopic);
-                if (pageSpanContext != null)
-                    builder = builder.AsChildOf(pageSpanContext);
-                var span = builder.Start();
+                ISpan span = null;
+                if (targetTopic != SoldAuctionsTopic)
+                {
+                    var builder = tracer.BuildSpan("Produce").WithTag("topic", targetTopic);
+                    if (pageSpanContext != null)
+                        builder = builder.AsChildOf(pageSpanContext);
+                    span = builder.Start();
+                    item.TraceContext = new Tracing.TextMap();
+                    tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
+                }
 
-                item.TraceContext = new Tracing.TextMap();
-                tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
                 ProduceIntoTopic(targetTopic, p, item, span);
             }
         }
@@ -613,7 +617,7 @@ namespace Coflnet.Sky.Updater
                         : $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
                 if (r.Topic == NewAuctionsTopic)
                     sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
-                span.Finish();
+                span?.Finish();
             });
         }
 
