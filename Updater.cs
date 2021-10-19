@@ -97,8 +97,15 @@ namespace Coflnet.Sky.Updater
 
             try
             {
-                if (lastUpdateDone == default(DateTime))
-                    lastUpdateDone = await CacheService.Instance.GetFromRedis<DateTime>(LAST_UPDATE_KEY);
+                try
+                {
+                    if (lastUpdateDone == default(DateTime))
+                        lastUpdateDone = await CacheService.Instance.GetFromRedis<DateTime>(LAST_UPDATE_KEY);
+                }
+                catch (Exception e)
+                {
+                    Logger.Instance.Error(e, $"load ");
+                }
 
                 if (lastUpdateDone == default(DateTime))
                     lastUpdateDone = new DateTime(2017, 1, 1);
