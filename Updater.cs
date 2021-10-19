@@ -203,6 +203,7 @@ namespace Coflnet.Sky.Updater
                             if (index == 0)
                             {
                                 lastHypixelCache = res.LastUpdated;
+                                LastPull = res.LastUpdated;
                                 // correct update time
                                 Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
                             }
@@ -265,9 +266,6 @@ namespace Coflnet.Sky.Updater
             {
                 RemoveCanceled(lastUuids);
             }).ConfigureAwait(false);
-
-            if (sum > 10)
-                LastPull = DateTime.Now;
 
             Console.WriteLine($"Updated {sum} auctions {doneCont} pages");
             UpdateSize = sum;

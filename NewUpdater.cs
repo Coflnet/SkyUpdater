@@ -36,7 +36,7 @@ namespace Coflnet.Sky.Updater
                     using var p = GetProducer();
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
-                    var waitTime = lastUpdate + TimeSpan.FromSeconds(70) - DateTime.Now;
+                    var waitTime = lastUpdate + TimeSpan.FromSeconds(69.9) - DateTime.Now;
                     if (waitTime < TimeSpan.FromSeconds(0))
                         waitTime = TimeSpan.FromSeconds(0);
                     await Task.Delay(waitTime);
@@ -77,7 +77,7 @@ namespace Coflnet.Sky.Updater
                     Console.WriteLine($"Age: {response.Headers.Where(a=>a.Key == "Age").Select(a=>a.Value).FirstOrDefault()?.FirstOrDefault()}");
                    */
 
-
+                    Updater.LastPull = lastUpdate;
                     var time = lastUpdate + TimeSpan.FromSeconds(68) - DateTime.Now;
                     Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(66)} " + time);
                     await Task.Delay(time < TimeSpan.Zero ? TimeSpan.Zero : time);
