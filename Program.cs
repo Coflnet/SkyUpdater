@@ -12,11 +12,11 @@ namespace Coflnet.Sky.Updater
 {
     public class Program
     {
-        static string apiKey = SimplerConfig.Config.Instance["apiKey"];
+        //static string apiKey = SimplerConfig.Config.Instance["apiKey"];
         public static void Main(string[] args)
         {
             var bazzar = new BazaarUpdater();
-            var updater = new Updater(apiKey);
+            var updater = new Updater(null);
             FileController.dataPaht = "/data";
             var loading = hypixel.ItemDetails.Instance.LoadFromDB();
 
@@ -24,7 +24,7 @@ namespace Coflnet.Sky.Updater
                 Updater.updaterIndex = 4;
             
             if(Updater.updaterIndex < 2)
-                bazzar.UpdateForEver(apiKey);
+                bazzar.UpdateForEver(null);
             updater.UpdateForEver();
             try
             {
