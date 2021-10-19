@@ -599,16 +599,14 @@ namespace Coflnet.Sky.Updater
             var tracer = OpenTracing.Util.GlobalTracer.Instance;
             foreach (var item in auctionsToAdd)
             {
-                ISpan span = null;
-                if (targetTopic != SoldAuctionsTopic)
-                {
-                    var builder = tracer.BuildSpan("Produce").WithTag("topic", targetTopic);
-                    if (pageSpanContext != null)
-                        builder = builder.AsChildOf(pageSpanContext);
-                    span = builder.Start();
-                    item.TraceContext = new Tracing.TextMap();
-                    tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
-                }
+
+                var builder = tracer.BuildSpan("Produce").WithTag("topic", targetTopic);
+                if (pageSpanContext != null && targetTopic != SoldAuctionsTopic)
+                    builder = builder.AsChildOf(pageSpanContext);
+                var span = builder.Start();
+                item.TraceContext = new Tracing.TextMap();
+                tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
+
 
                 ProduceIntoTopic(targetTopic, p, item, span);
             }
