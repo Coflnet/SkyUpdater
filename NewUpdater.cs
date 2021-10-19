@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
@@ -9,6 +10,7 @@ using System.Threading.Tasks;
 using Coflnet.Sky.Updater.Models;
 using Confluent.Kafka;
 using hypixel;
+using Newtonsoft.Json;
 
 namespace Coflnet.Sky.Updater
 {
@@ -46,7 +48,7 @@ namespace Coflnet.Sky.Updater
                             try
                             {
                                 using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
-                                var time = await GetAndSavePage(page, p, lastUpdate,siteSpan);
+                                var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
                                 if (page < 10)
                                     lastUpdate = time;
 
@@ -101,52 +103,46 @@ namespace Coflnet.Sky.Updater
             var count = 0;
             while (page.LastUpdated <= lastUpdate)
             {
-                using var document = await JsonDocument.ParseAsync(await httpClient.GetStreamAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId));
-                var root = document.RootElement;
-                page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
-                if (page.LastUpdated <= lastUpdate)
-                {
-                    // wait for the server cache to refresh
-                    await Task.Delay(REQUEST_BACKOF_DELAY);
-                    continue;
-                }
+                var tokenSource = new CancellationTokenSource();
+                using var s = await httpClient.GetStreamAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, tokenSource.Token).ConfigureAwait(false);
+                //page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
 
-                foreach (var item in document.RootElement.GetProperty("auctions").EnumerateArray())
+                var serializer = new Newtonsoft.Json.JsonSerializer();
+                using (StreamReader sr = new StreamReader(s))
+                using (JsonReader reader = new JsonTextReader(sr))
                 {
-                    var start = item.GetProperty("start").GetInt64();
-                    if (start > time)
+                    for (int i = 0; i < 11; i++)
                     {
-                        var auction = new Auction()
+                        reader.Read();
+                    }
+                    page._lastUpdated = (long)reader.Value;
+                    if (page.LastUpdated <= lastUpdate)
+                    {
+                        tokenSource.Cancel();
+                        // wait for the server cache to refresh
+                        await Task.Delay(REQUEST_BACKOF_DELAY);
+                        continue;
+                    }
+                    reader.Read();
+                    if (count == 0)
+                    {
+                        using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("First").AsChildOf(siteSpan.Span).StartActive();
+                    }
+                    await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")))
+                    {
+
+                        if (auction.Start < lastUpdate)
+                            continue;
+                        if (count == 0)
                         {
-                            Uuid = item.GetProperty("uuid").GetString(),
-                            ItemName = item.GetProperty("item_name").GetString(),
-                            StartingBid = item.GetProperty("starting_bid").GetInt64(),
-                            Tier = item.GetProperty("tier").GetString(),
-                            Auctioneer = item.GetProperty("auctioneer").GetString(),
-                            ItemBytes = item.GetProperty("item_bytes").GetString(),
-                            _end = item.GetProperty("end").GetInt64(),
-                            _start = start,
-                            Category = item.GetProperty("category").GetString(),
-                            HighestBidAmount = item.GetProperty("highest_bid_amount").GetInt64(),
-                            ItemLore = item.GetProperty("item_lore").GetString()
-                        };
-                        if (item.TryGetProperty("bin", out JsonElement elem))
-                            auction.BuyItNow = true;
-                        try
-                        {
-                            if(count == 0)
-                            {
-                                using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).StartActive();
-                            }
-                            Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), null);
+                            using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).StartActive();
                         }
-                        catch (Exception e)
-                        {
-                            dev.Logger.Instance.Error(e, JsonSerializer.Serialize(auction));
-                        }
+                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), null);
+
                         count++;
                     }
                 }
+
                 Console.WriteLine($"Loaded page: {pageId} found {count} on {DateTime.Now} update: {page.LastUpdated}");
             }
             return page.LastUpdated;
