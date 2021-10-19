@@ -78,6 +78,7 @@ namespace Coflnet.Sky.Updater
                    */
 
                     Updater.LastPull = lastUpdate;
+                    BinUpdater.GrabAuctions(new Hypixel.NET.HypixelApi(null,0));
                     var time = lastUpdate + TimeSpan.FromSeconds(68) - DateTime.Now;
                     Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(66)} " + time);
                     await Task.Delay(time < TimeSpan.Zero ? TimeSpan.Zero : time);
