@@ -145,9 +145,9 @@ namespace Coflnet.Sky.Updater
                         if (auction.Start < lastUpdate)
                             continue;
 
-                        using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).StartActive();
+                        var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).Start();
 
-                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), prodSpan.Span);
+                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), prodSpan);
 
                         count++;
                     }
