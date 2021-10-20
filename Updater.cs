@@ -37,6 +37,7 @@ namespace Coflnet.Sky.Updater
         private static string AuctionEndedTopic = SimplerConfig.Config.Instance["TOPICS:AUCTION_ENDED"];
         private static string NewBidsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_BID"];
         private static string AuctionSumary = SimplerConfig.Config.Instance["TOPICS:AH_SUMARY"];
+        private static int DropOffset = Int32.Parse(SimplerConfig.Config.Instance["DROP_OFFSET"] ?? "0");
 
         private static bool doFullUpdate = false;
         Prometheus.Counter auctionUpdateCount = Prometheus.Metrics.CreateCounter("auction_update", "How many auctions were updated");
@@ -188,6 +189,9 @@ namespace Coflnet.Sky.Updater
                                 page = max - index;
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
+
+                            if (ShouldPageBeLoaded(page))
+                                return;
                             AuctionPage res;
                             using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                             {
@@ -259,7 +263,6 @@ namespace Coflnet.Sky.Updater
                     await item;
 
 
-
                 p.Flush(TimeSpan.FromSeconds(10));
             }
 
@@ -297,6 +300,11 @@ namespace Coflnet.Sky.Updater
             OnNewUpdateEnd?.Invoke();
 
             return lastHypixelCache;
+        }
+
+        public static bool ShouldPageBeLoaded(int page)
+        {
+            return (page + DropOffset) % 60 == DateTime.Now.Minute;
         }
 
         private static async Task<AuctionPage> LoadPage(int page)
@@ -599,14 +607,12 @@ namespace Coflnet.Sky.Updater
             var tracer = OpenTracing.Util.GlobalTracer.Instance;
             foreach (var item in auctionsToAdd)
             {
-
                 var builder = tracer.BuildSpan("Produce").WithTag("topic", targetTopic);
                 if (pageSpanContext != null && targetTopic != SoldAuctionsTopic)
                     builder = builder.AsChildOf(pageSpanContext);
                 var span = builder.Start();
                 item.TraceContext = new Tracing.TextMap();
                 tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
-
 
                 ProduceIntoTopic(targetTopic, p, item, span);
             }

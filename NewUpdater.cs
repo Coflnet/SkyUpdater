@@ -22,6 +22,7 @@ namespace Coflnet.Sky.Updater
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
             LingerMs = 0
         };
+        private static HttpClient httpClient = new HttpClient();
 
         public async Task DoUpdates(int index, CancellationToken token)
         {
@@ -50,7 +51,7 @@ namespace Coflnet.Sky.Updater
                             {
                                 using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
                                 var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
-                                if (page < 10)
+                                if (page < 20)
                                     lastUpdate = time;
 
                             }
@@ -106,7 +107,8 @@ namespace Coflnet.Sky.Updater
 
         private async Task<DateTime> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan)
         {
-            var httpClient = new HttpClient();
+            if(Updater.ShouldPageBeLoaded(pageId))
+                return lastUpdate;
             var time = lastUpdate.ToUnix() * 1000;
             var page = new AuctionPage();
             var count = 0;
@@ -114,11 +116,16 @@ namespace Coflnet.Sky.Updater
             while (page.LastUpdated <= lastUpdate)
             {
                 var tokenSource = new CancellationTokenSource();
-                using var s = await httpClient.GetStreamAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, tokenSource.Token).ConfigureAwait(false);
+                using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
+                LogHeaderName(siteSpan, s, "age");
+                LogHeaderName(siteSpan, s, "date");
+                LogHeaderName(siteSpan, s, "cf-ray");
+                if(s.StatusCode != System.Net.HttpStatusCode.OK)
+                    throw new HttpRequestException();
                 //page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
 
                 var serializer = new Newtonsoft.Json.JsonSerializer();
-                using (StreamReader sr = new StreamReader(s))
+                using (StreamReader sr = new StreamReader(s.Content.ReadAsStream()))
                 using (JsonReader reader = new JsonTextReader(sr))
                 {
                     for (int i = 0; i < 11; i++)
@@ -156,6 +163,11 @@ namespace Coflnet.Sky.Updater
                 Console.WriteLine($"Loaded page: {pageId} found {count} on {DateTime.Now} update: {page.LastUpdated}");
             }
             return page.LastUpdated;
+        }
+
+        private static void LogHeaderName(OpenTracing.IScope siteSpan, HttpResponseMessage s, string headerName)
+        {
+            siteSpan.Span.Log($"{headerName}: " + s.Headers.Where(h => h.Key == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault());
         }
     }
 }
