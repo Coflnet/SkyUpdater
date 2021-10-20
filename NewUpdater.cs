@@ -108,7 +108,10 @@ namespace Coflnet.Sky.Updater
         private async Task<DateTime> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan)
         {
             if(Updater.ShouldPageBeLoaded(pageId))
+            {
+                using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("DropPage").AsChildOf(siteSpan.Span).StartActive();
                 return lastUpdate;
+            }
             var time = lastUpdate.ToUnix() * 1000;
             var page = new AuctionPage();
             var count = 0;
