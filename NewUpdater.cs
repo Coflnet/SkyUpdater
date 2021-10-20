@@ -167,7 +167,7 @@ namespace Coflnet.Sky.Updater
 
         private static void LogHeaderName(OpenTracing.IScope siteSpan, HttpResponseMessage s, string headerName)
         {
-            siteSpan.Span.Log($"{headerName}: " + s.Headers.Where(h => h.Key == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault());
+            siteSpan.Span.Log($"{headerName}: " + s.Headers.Where(h => h.Key.ToLower() == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault());
         }
     }
 }
