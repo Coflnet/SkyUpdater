@@ -110,6 +110,7 @@ namespace Coflnet.Sky.Updater
             var time = lastUpdate.ToUnix() * 1000;
             var page = new AuctionPage();
             var count = 0;
+            var tryCount = 0;
             while (page.LastUpdated <= lastUpdate)
             {
                 var tokenSource = new CancellationTokenSource();
@@ -128,8 +129,9 @@ namespace Coflnet.Sky.Updater
                     if (page.LastUpdated <= lastUpdate)
                     {
                         tokenSource.Cancel();
+                        tryCount++;
                         // wait for the server cache to refresh
-                        await Task.Delay(REQUEST_BACKOF_DELAY);
+                        await Task.Delay(REQUEST_BACKOF_DELAY * tryCount);
                         continue;
                     }
                     reader.Read();
@@ -142,11 +144,10 @@ namespace Coflnet.Sky.Updater
 
                         if (auction.Start < lastUpdate)
                             continue;
-                        if (count == 0)
-                        {
-                            using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).StartActive();
-                        }
-                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), siteSpan.Span);
+
+                        using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).StartActive();
+
+                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), prodSpan.Span);
 
                         count++;
                     }
