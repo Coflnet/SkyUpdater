@@ -40,6 +40,7 @@ namespace Coflnet.Sky.Updater
                     if (waitTime < TimeSpan.FromSeconds(0))
                         waitTime = TimeSpan.FromSeconds(0);
                     await Task.Delay(waitTime);
+                    Console.WriteLine($"starting downloads {DateTime.Now} waited {waitTime}");
                     for (int i = 0; i < 9; i++)
                     {
                         var page = index + i * 10;
@@ -86,8 +87,8 @@ namespace Coflnet.Sky.Updater
                     {
                         dev.Logger.Instance.Error(e, "updating sells ");
                     }
-                    var time = lastUpdate + TimeSpan.FromSeconds(68) - DateTime.Now;
-                    Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(66)} " + time);
+                    var time = lastUpdate + TimeSpan.FromSeconds(65) - DateTime.Now;
+                    Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(65)} " + time);
                     await Task.Delay(time < TimeSpan.Zero ? TimeSpan.Zero : time);
                 }
                 catch (Exception e)
