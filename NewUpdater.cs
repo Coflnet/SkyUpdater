@@ -16,7 +16,7 @@ namespace Coflnet.Sky.Updater
 {
     public class NewUpdater
     {
-        private const int REQUEST_BACKOF_DELAY = 80;
+        private const int REQUEST_BACKOF_DELAY = 180;
         private static ProducerConfig producerConfig = new ProducerConfig
         {
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
@@ -146,7 +146,7 @@ namespace Coflnet.Sky.Updater
                         {
                             using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).StartActive();
                         }
-                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), null);
+                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), siteSpan.Span);
 
                         count++;
                     }

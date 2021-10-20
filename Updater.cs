@@ -81,7 +81,7 @@ namespace Coflnet.Sky.Updater
             this.apiKey = apiKey;
             this.apiClient = new Hypixel.NET.HypixelApi(apiKey, 1);
 
-            var scheduler = new LimitedConcurrencyLevelTaskScheduler(3);
+            var scheduler = new LimitedConcurrencyLevelTaskScheduler(2);
             taskFactory = new TaskFactory(scheduler);
         }
 
