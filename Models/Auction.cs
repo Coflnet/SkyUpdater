@@ -59,6 +59,7 @@ namespace Coflnet.Sky.Updater.Models
         public string Extra { get; set; }
 
         [JsonPropertyName("category")]
+        [Newtonsoft.Json.JsonProperty("category")]
         public string Category { get; set; }
 
         [JsonPropertyName("claimed")]
@@ -71,6 +72,7 @@ namespace Coflnet.Sky.Updater.Models
         public List<string> Coop { get; set; }
 
         [JsonPropertyName("tier")]
+        [Newtonsoft.Json.JsonProperty("tier")]
         public string Tier { get; set; }
 
         [JsonPropertyName("starting_bid")]
@@ -89,6 +91,7 @@ namespace Coflnet.Sky.Updater.Models
         public List<Bids> Bids { get; set; }
 
         [JsonPropertyName("bin")]
+        [Newtonsoft.Json.JsonProperty("bin")]
         public bool BuyItNow { get; set; }
     }
 }
