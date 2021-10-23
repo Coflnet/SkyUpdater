@@ -21,7 +21,7 @@ namespace Coflnet.Sky.Updater
             var loading = hypixel.ItemDetails.Instance.LoadFromDB();
 
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
-                Updater.updaterIndex = 4;
+                Updater.updaterIndex = 0;
             
             if(Updater.updaterIndex < 2)
                 bazzar.UpdateForEver(null);
