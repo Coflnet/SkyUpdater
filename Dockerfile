@@ -14,9 +14,9 @@ WORKDIR /app
 
 COPY --from=build /build/SkyCommand/bin/release/net5.0/publish/ .
 RUN mkdir /data
-#COPY --from=frontend /build/build/ /data/files
+ENV ASPNETCORE_URLS=http://+:8000;http://+:80
 
-ENTRYPOINT ["dotnet", "SkyUpdater.dll"]
+ENTRYPOINT ["dotnet", "SkyUpdater.dll", "--hostBuilder:reloadConfigOnChange=false"]
 
 VOLUME /data
 

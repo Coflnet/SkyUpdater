@@ -94,9 +94,11 @@ namespace Coflnet.Sky.Updater
             i.Category = a.Category;
             i.Description = a.ItemLore;
             i.Extra = a.Extra;
-            i.MinecraftType = MinecraftTypeParser.Instance.Parse(a);
+            Console.WriteLine("minecraft types are currently disabled");
+            //i.MinecraftType = MinecraftTypeParser.Instance.Parse(a);
+            i.MinecraftType = "";
 
-            SetIconUrl(a, i);
+            //SetIconUrl(a, i);
 
             ItemDetails.Instance.Items[name] = i;
             var newItem = new DBItem(i);
