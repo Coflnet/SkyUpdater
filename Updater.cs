@@ -280,7 +280,7 @@ namespace Coflnet.Sky.Updater
             Console.WriteLine($"Updated {sum} auctions {doneCont} pages");
             UpdateSize = sum;
 
-            if (updaterIndex == 0)
+            if (updaterIndex <= 1)
                 using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
                 {
                     Console.WriteLine("delivering sumary");
