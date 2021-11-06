@@ -415,7 +415,6 @@ namespace Coflnet.Sky.Updater
                         Logger.Instance.Error("Updater encountered an outside error: " + e.Message);
                         await Task.Delay(15000);
                     }
-
                 }
             }, token).ConfigureAwait(false);
         }
