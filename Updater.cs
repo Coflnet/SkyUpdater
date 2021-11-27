@@ -495,7 +495,14 @@ namespace Coflnet.Sky.Updater
                 await Task.Delay(8000);
                 foreach (var a in res.Auctions)
                 {
-                    extractor.AddOrIgnoreDetails(a);
+                    try
+                    {
+                        extractor.AddOrIgnoreDetails(a);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Instance.Error(e, $"extracting details");
+                    }
                     count++;
                     var auction = ConvertAuction(a);
                     sumary.ActiveAuctions[auction.UId] = 1;
