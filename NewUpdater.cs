@@ -47,7 +47,7 @@ namespace Coflnet.Sky.Updater
                         {
                             try
                             {
-                                var secondsAdjust = ageLookup[page] * 0.5;
+                                var secondsAdjust = ageLookup.GetValueOrDefault(page) * 0.5;
                                 var waitTime = lastUpdate + TimeSpan.FromSeconds(69.9 - secondsAdjust) - DateTime.Now;
                                 if (waitTime < TimeSpan.FromSeconds(0))
                                     waitTime = TimeSpan.FromSeconds(0);
