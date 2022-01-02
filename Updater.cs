@@ -188,7 +188,7 @@ namespace Coflnet.Sky.Updater
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
 
-                            if (ShouldPageBeLoaded(page))
+                            if (ShouldPageBeDropped(page))
                                 return;
                             AuctionPage res;
                             using(var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
@@ -299,7 +299,7 @@ namespace Coflnet.Sky.Updater
             return lastHypixelCache;
         }
 
-        public static bool ShouldPageBeLoaded(int page)
+        public static bool ShouldPageBeDropped(int page)
         {
             return (page + DropOffset) % 60 == DateTime.Now.Minute;
         }

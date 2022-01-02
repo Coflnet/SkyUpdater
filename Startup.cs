@@ -27,7 +27,7 @@ namespace Coflnet.Sky.Updater
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "SkyUpdater", Version = "v1" });
             });
-            services.AddJaeger();
+            services.AddJaeger(0.5);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
