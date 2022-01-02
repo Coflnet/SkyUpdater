@@ -56,9 +56,10 @@ namespace Coflnet.Sky.Updater
                                 var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
                                 if (page < 20)
                                     lastUpdate = time.Item1;
-                                if(secondsAdjust > 0)
+                                if (secondsAdjust > 0)
                                     span.Span.Log($"adjusted page {page} by {secondsAdjust}");
-                                ageLookup[page] = time.Item2;
+                                if (time.Item2 < 3)
+                                    ageLookup[page] = time.Item2;
 
                             }
                             catch (HttpRequestException e)
@@ -123,6 +124,7 @@ namespace Coflnet.Sky.Updater
             var count = 0;
             var tryCount = 0;
             var age = 0;
+            string uuid = null;
             while (page.LastUpdated <= lastUpdate)
             {
                 var tokenSource = new CancellationTokenSource();
@@ -162,6 +164,7 @@ namespace Coflnet.Sky.Updater
                         var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).Start();
 
                         Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), prodSpan);
+                        uuid = auction.Uuid;
 
                         count++;
                     }
@@ -171,7 +174,7 @@ namespace Coflnet.Sky.Updater
                 LogHeaderName(siteSpan, s, "cf-ray");
                 int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
 
-                Console.WriteLine($"Loaded page: {pageId} found {count} on {DateTime.Now} update: {page.LastUpdated}");
+                Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} update: {page.LastUpdated}");
             }
             return (page.LastUpdated, age);
         }
