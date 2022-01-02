@@ -44,9 +44,11 @@ namespace Coflnet.Sky.Updater
 
         static Prometheus.HistogramConfiguration buckets = new Prometheus.HistogramConfiguration()
         {
-            Buckets = Prometheus.Histogram.LinearBuckets(start: 8, width: 2, count: 10)
+            Buckets = Prometheus.Histogram.LinearBuckets(start: 9, width: 2, count: 10)
         };
         static Prometheus.Histogram sendingTime = Prometheus.Metrics.CreateHistogram("timeToSending", "The time from api Update to sending. (should be close to 10)",
+            buckets);
+        static Prometheus.Histogram timeToFind = Prometheus.Metrics.CreateHistogram("sky_updater_time_to_find", "The time from api Update till deserialising. (should be close to 10)",
             buckets);
 
         /// <summary>
@@ -151,7 +153,7 @@ namespace Coflnet.Sky.Updater
             var firstPage = await LoadPage(page).ConfigureAwait(false);
             Console.WriteLine($"Updating Data {DateTime.Now} " + firstPage.WasSuccessful);
 
-            max = (int) firstPage.TotalPages;
+            max = (int)firstPage.TotalPages;
             while (firstPage.LastUpdated == updateStartTime)
             {
                 // wait for the server cache to refresh
@@ -169,13 +171,13 @@ namespace Coflnet.Sky.Updater
             Console.WriteLine("loading total pages " + max);
             var sumary = new AhStateSumary();
 
-            using(var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
+            using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
                 for (int loopIndexNotUse = 0; loopIndexNotUse < max; loopIndexNotUse++)
                 {
                     var index = loopIndexNotUse;
                     await Task.Delay(MillisecondsDelay);
-                    tasks.Add(taskFactory.StartNew(async() =>
+                    tasks.Add(taskFactory.StartNew(async () =>
                     {
                         var tracer = GlobalTracer.Instance;
                         using var scope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive();
@@ -191,7 +193,7 @@ namespace Coflnet.Sky.Updater
                             if (ShouldPageBeDropped(page))
                                 return;
                             AuctionPage res;
-                            using(var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
+                            using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                             {
                                 res = index != 0 ? await LoadPage(page).ConfigureAwait(false) : firstPage;
                             }
@@ -199,7 +201,7 @@ namespace Coflnet.Sky.Updater
                             {
                                 // tripple the backoff because these will be more
                                 await Task.Delay(REQUEST_BACKOF_DELAY * 3);
-                                using(var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
+                                using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                                 {
                                     res = await LoadPage(page).ConfigureAwait(false);
                                 }
@@ -207,7 +209,7 @@ namespace Coflnet.Sky.Updater
                             if (res == null)
                                 return;
 
-                            max = (int) res.TotalPages;
+                            max = (int)res.TotalPages;
 
                             if (index == 0)
                             {
@@ -222,7 +224,7 @@ namespace Coflnet.Sky.Updater
                             if (res.LastUpdated == updateStartTime)
                                 scope.Span.SetTag("notUpdated", true);
                             scope.Span.Log($"Loaded {val}");
-                            lock(sumloc)
+                            lock (sumloc)
                             {
                                 sum += val;
                                 // process done
@@ -277,7 +279,7 @@ namespace Coflnet.Sky.Updater
             UpdateSize = sum;
 
             if (updaterIndex <= 1)
-                using(var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
+                using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
                 {
                     Console.WriteLine("delivering sumary");
                     sumary.Time = DateTime.Now;
@@ -358,8 +360,8 @@ namespace Coflnet.Sky.Updater
             ProduceIntoTopic(removed.Select(uuid => new SaveAuction()
             {
                 Uuid = uuid,
-                    UId = AuctionService.Instance.GetId(uuid),
-                    End = DateTime.Now
+                UId = AuctionService.Instance.GetId(uuid),
+                End = DateTime.Now
             }), MissingAuctionsTopic);
             foreach (var item in removed)
             {
@@ -372,7 +374,7 @@ namespace Coflnet.Sky.Updater
         {
             CancellationTokenSource source = new CancellationTokenSource();
             // Fail save
-            Task.Run(async() =>
+            Task.Run(async () =>
             {
                 while (true)
                 {
@@ -390,7 +392,7 @@ namespace Coflnet.Sky.Updater
 
         private void StartNewUpdater(CancellationToken token)
         {
-            Task.Run(async() =>
+            Task.Run(async () =>
             {
                 minimumOutput = true;
                 var updaterStart = DateTime.Now.RoundDown(TimeSpan.FromMinutes(1));
@@ -449,7 +451,7 @@ namespace Coflnet.Sky.Updater
         async Task<int> Save(AuctionPage res, DateTime lastUpdate, AhStateSumary sumary, IProducer<string, SaveAuction> p, ISpanContext pageSpanContext)
         {
             List<SaveAuction> processed = new List<SaveAuction>();
-            using(var span = GlobalTracer.Instance.BuildSpan("parsePage").AsChildOf(pageSpanContext).StartActive())
+            using (var span = GlobalTracer.Instance.BuildSpan("parsePage").AsChildOf(pageSpanContext).StartActive())
             {
                 processed = res.Auctions.Where(item =>
                     {
@@ -530,24 +532,24 @@ namespace Coflnet.Sky.Updater
         {
             var a = new SaveAuction()
             {
-                ClaimedBids = auction.ClaimedBidders?.Select(s => new UuId((string) s))?.ToList(),
-                    Claimed = auction.Claimed,
-                    //ItemBytes = auction.ItemBytes;
-                    StartingBid = auction.StartingBid,
+                ClaimedBids = auction.ClaimedBidders?.Select(s => new UuId((string)s))?.ToList(),
+                Claimed = auction.Claimed,
+                //ItemBytes = auction.ItemBytes;
+                StartingBid = auction.StartingBid,
 
-                    // make sure that the lenght is shorter than max
-                    ItemName = auction.ItemName,
-                    End = auction.End,
-                    Start = auction.Start,
-                    Coop = auction.Coop,
+                // make sure that the lenght is shorter than max
+                ItemName = auction.ItemName,
+                End = auction.End,
+                Start = auction.Start,
+                Coop = auction.Coop,
 
-                    ProfileId = auction.ProfileId == auction.Auctioneer ? null : auction.ProfileId,
-                    AuctioneerId = auction.Auctioneer,
-                    Uuid = auction.Uuid,
-                    HighestBidAmount = auction.HighestBidAmount,
-                    Bids = new List<SaveBids>(),
-                    Bin = auction.BuyItNow, // missing from nuget package
-                    UId = AuctionService.Instance.GetId(auction.Uuid),
+                ProfileId = auction.ProfileId == auction.Auctioneer ? null : auction.ProfileId,
+                AuctioneerId = auction.Auctioneer,
+                Uuid = auction.Uuid,
+                HighestBidAmount = auction.HighestBidAmount,
+                Bids = new List<SaveBids>(),
+                Bin = auction.BuyItNow, // missing from nuget package
+                UId = AuctionService.Instance.GetId(auction.Uuid),
             };
 
             if (auction.Bids != null)
@@ -556,10 +558,10 @@ namespace Coflnet.Sky.Updater
                     a.Bids.Add(new SaveBids()
                     {
                         AuctionId = bid.AuctionId.Substring(0, 5),
-                            Bidder = bid.Bidder,
-                            ProfileId = bid.ProfileId == bid.Bidder ? null : bid.ProfileId,
-                            Amount = bid.Amount,
-                            Timestamp = bid.Timestamp
+                        Bidder = bid.Bidder,
+                        ProfileId = bid.ProfileId == bid.Bidder ? null : bid.ProfileId,
+                        Amount = bid.Amount,
+                        Timestamp = bid.Timestamp
                     });
                 }
             NBT.FillDetails(a, auction.ItemBytes);
@@ -600,7 +602,7 @@ namespace Coflnet.Sky.Updater
 
         private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ISpanContext pageSpanContext = null)
         {
-            using(var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
+            using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
                 ProduceIntoTopic(auctionsToAdd, targetTopic, p, pageSpanContext);
 
@@ -631,6 +633,9 @@ namespace Coflnet.Sky.Updater
 
         public static void ProduceIntoTopic(string targetTopic, IProducer<string, SaveAuction> p, SaveAuction item, ISpan span)
         {
+            if (targetTopic == NewAuctionsTopic)
+                timeToFind.Observe((DateTime.Now - item.FindTime).TotalSeconds);
+
             p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
             {
                 if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
