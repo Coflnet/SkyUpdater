@@ -590,7 +590,7 @@ namespace Coflnet.Sky.Updater
         private static ProducerConfig producerConfig = new ProducerConfig
         {
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 2
+            LingerMs = 10
         };
 
         public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, IScope span)
