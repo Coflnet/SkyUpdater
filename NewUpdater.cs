@@ -96,6 +96,7 @@ namespace Coflnet.Sky.Updater
                         dev.Logger.Instance.Error(e, "updating sells ");
                     }
                     var time = lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now;
+                    Updater.lastUpdateDone = lastUpdate;
                     Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(65)} " + time);
                     await Task.Delay(time < TimeSpan.Zero ? TimeSpan.Zero : time);
                 }

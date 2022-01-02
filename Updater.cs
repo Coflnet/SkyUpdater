@@ -128,7 +128,7 @@ namespace Coflnet.Sky.Updater
             return lastUpdateDone;
         }
 
-        DateTime lastUpdateDone = default(DateTime);
+        public static DateTime lastUpdateDone = default(DateTime);
 
         async Task<DateTime> RunUpdate(DateTime updateStartTime)
         {
