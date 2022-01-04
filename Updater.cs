@@ -550,6 +550,7 @@ namespace Coflnet.Sky.Updater
                 Bids = new List<SaveBids>(),
                 Bin = auction.BuyItNow, // missing from nuget package
                 UId = AuctionService.Instance.GetId(auction.Uuid),
+                Context = new Dictionary<string, string>() { { "upT", apiUpdate.ToString() }, { "fT", DateTime.Now.ToString() }, { "lore", auction.ItemLore} }
             };
 
             if (auction.Bids != null)

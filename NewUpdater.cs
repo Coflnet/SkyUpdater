@@ -32,10 +32,10 @@ namespace Coflnet.Sky.Updater
             while (!token.IsCancellationRequested)
             {
                 Console.WriteLine("Starting new updater " + DateTime.Now);
-                var tracer = OpenTracing.Util.GlobalTracer.Instance;
-                using var span = tracer.BuildSpan("FastUpdate").StartActive();
                 try
                 {
+                    var tracer = OpenTracing.Util.GlobalTracer.Instance;
+                    using var span = tracer.BuildSpan("FastUpdate").StartActive();
                     using var p = GetProducer();
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
@@ -78,6 +78,7 @@ namespace Coflnet.Sky.Updater
                     }
                     // wait for up to 10 seconds for any inflight messages to be delivered.
                     p.Flush(TimeSpan.FromSeconds(10));
+
                     /*
                     var client = new HttpClient();
                     var response = await client.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + index);
@@ -163,8 +164,10 @@ namespace Coflnet.Sky.Updater
                             continue;
 
                         var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).Start();
-
-                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, Updater.ConvertAuction(auction, page.LastUpdated), prodSpan);
+                        var a = Updater.ConvertAuction(auction, page.LastUpdated);
+                        a.Context["upage"] = pageId.ToString();
+                        a.Context["utry"] = tryCount.ToString();
+                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, a, prodSpan);
                         uuid = auction.Uuid;
 
                         count++;
