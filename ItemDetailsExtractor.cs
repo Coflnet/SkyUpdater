@@ -94,7 +94,8 @@ namespace Coflnet.Sky.Updater
             i.Category = a.Category;
             i.Description = a.ItemLore;
             i.Extra = a.Extra;
-            Console.WriteLine("minecraft types are currently disabled");
+            if (a.Uuid[0] == 'a')
+                Console.WriteLine("minecraft types are currently disabled");
             //i.MinecraftType = MinecraftTypeParser.Instance.Parse(a);
             i.MinecraftType = "";
 

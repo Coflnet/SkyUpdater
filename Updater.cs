@@ -283,11 +283,13 @@ namespace Coflnet.Sky.Updater
                 {
                     Console.WriteLine("delivering sumary, size: " + MessagePack.MessagePackSerializer.Serialize(sumary).Length);
                     sumary.Time = DateTime.Now;
-                    var p1 = sumary.ActiveAuctions.Take(sumary.ActiveAuctions.Count);
-                    var p2 = sumary.ActiveAuctions.Skip(sumary.ActiveAuctions.Count);
+                    var p1 = sumary.ActiveAuctions.Take(sumary.ActiveAuctions.Count / 2);
+                    var p2 = sumary.ActiveAuctions.Skip(p1.Count());
 
                     var s1 = new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p1), ItemCount = sumary.ItemCount, Time = sumary.Time };
                     var s2 = new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p2), ItemCount = sumary.ItemCount, Time = sumary.Time };
+                    Console.WriteLine("actual: " + MessagePack.MessagePackSerializer.Serialize(s1).Length);
+                    Console.WriteLine("actual: " + MessagePack.MessagePackSerializer.Serialize(s2).Length);
                     ProduceSumary(s1, p);
                     ProduceSumary(s2, p);
                     p.Flush(TimeSpan.FromSeconds(10));
