@@ -110,7 +110,7 @@ namespace Coflnet.Sky.Updater
                 }
 
                 if (lastUpdateDone == default(DateTime))
-                    lastUpdateDone = new DateTime(2017, 1, 1);
+                    lastUpdateDone = new DateTime(2021, 1, 9, 20, 0, 0);
                 lastUpdateDone = await RunUpdate(lastUpdateDone);
                 FileController.SaveAs(LAST_UPDATE_KEY, lastUpdateDone);
                 await CacheService.Instance.SaveInRedis(LAST_UPDATE_KEY, lastUpdateDone);
@@ -550,7 +550,7 @@ namespace Coflnet.Sky.Updater
                 Bids = new List<SaveBids>(),
                 Bin = auction.BuyItNow, // missing from nuget package
                 UId = AuctionService.Instance.GetId(auction.Uuid),
-                Context = new Dictionary<string, string>() { { "upT", apiUpdate.ToString() }, { "fT", (DateTime.Now - apiUpdate).ToString() }, { "lore", auction.ItemLore} }
+                Context = new Dictionary<string, string>() { { "upT", apiUpdate.ToString() }, { "fT", (DateTime.Now - apiUpdate).ToString() }, { "lore", auction.ItemLore } }
             };
 
             if (auction.Bids != null)
@@ -593,8 +593,9 @@ namespace Coflnet.Sky.Updater
         private static ProducerConfig producerConfig = new ProducerConfig
         {
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 5,
-            BatchNumMessages = 500
+            LingerMs = 2,
+            BatchNumMessages = 100,
+            BatchSize = 50_000,
         };
 
         public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, IScope span)
