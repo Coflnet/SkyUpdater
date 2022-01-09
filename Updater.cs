@@ -120,8 +120,6 @@ namespace Coflnet.Sky.Updater
                 throw e;
             }
 
-            ItemDetails.Instance.Save();
-
             return lastUpdateDone;
         }
 
