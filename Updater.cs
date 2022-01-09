@@ -512,7 +512,7 @@ namespace Coflnet.Sky.Updater
                     }
                     count++;
                     var auction = ConvertAuction(a);
-                    sumary.ActiveAuctions[auction.UId] = 1;
+                    sumary.ActiveAuctions[auction.UId] = auction.End.Ticks;
                     sumary.ItemCount.AddOrUpdate(auction.Tag, 1, (tag, count) => ++count);
                 }
                 auctionUpdateCount.Inc(count);
