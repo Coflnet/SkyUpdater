@@ -148,6 +148,12 @@ namespace Coflnet.Sky.Updater
                     {
                         tokenSource.Cancel();
                         tryCount++;
+                        if(tryCount > 10)
+                        {
+                            // give up and retry next minute
+                            return (lastUpdate, 0);
+                        }
+                        siteSpan.Span.SetTag("try",tryCount);
                         // wait for the server cache to refresh
                         await Task.Delay(REQUEST_BACKOF_DELAY * tryCount);
                         continue;
