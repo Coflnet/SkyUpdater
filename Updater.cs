@@ -112,14 +112,11 @@ namespace Coflnet.Sky.Updater
                 if (lastUpdateDone == default(DateTime))
                     lastUpdateDone = new DateTime(2021, 1, 9, 20, 0, 0);
                 lastUpdateDone = await RunUpdate(lastUpdateDone);
-                FileController.SaveAs(LAST_UPDATE_KEY, lastUpdateDone);
                 await CacheService.Instance.SaveInRedis(LAST_UPDATE_KEY, lastUpdateDone);
-                FileController.Delete("lastUpdateStart");
             }
             catch (Exception e)
             {
                 Logger.Instance.Error($"Updating stopped because of {e.Message} {e.StackTrace}  {e.InnerException?.Message} {e.InnerException?.StackTrace}");
-                FileController.Delete("lastUpdateStart");
                 throw e;
             }
 
