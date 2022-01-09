@@ -281,15 +281,15 @@ namespace Coflnet.Sky.Updater
             if (updaterIndex <= 1)
                 using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
                 {
-                    Console.WriteLine("delivering sumary");
+                    Console.WriteLine("delivering sumary, size: " + MessagePack.MessagePackSerializer.Serialize(sumary).Length);
                     sumary.Time = DateTime.Now;
-                    p.Produce(AuctionSumary, new Message<string, AhStateSumary> { Value = sumary, Key = "" }, r =>
-                    {
-                        if (r.Error.IsError || r.TopicPartitionOffset.Offset % 100 == 10)
-                            Console.WriteLine(!r.Error.IsError ?
-                                $"Delivered {r.Topic} {r.Offset} " :
-                                $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
-                    });
+                    var p1 = sumary.ActiveAuctions.Take(sumary.ActiveAuctions.Count);
+                    var p2 = sumary.ActiveAuctions.Skip(sumary.ActiveAuctions.Count);
+
+                    var s1 = new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p1), ItemCount = sumary.ItemCount, Time = sumary.Time };
+                    var s2 = new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p2), ItemCount = sumary.ItemCount, Time = sumary.Time };
+                    ProduceSumary(s1, p);
+                    ProduceSumary(s2, p);
                     p.Flush(TimeSpan.FromSeconds(10));
                 }
             else
@@ -299,6 +299,17 @@ namespace Coflnet.Sky.Updater
             OnNewUpdateEnd?.Invoke();
 
             return lastHypixelCache;
+        }
+
+        private static void ProduceSumary(AhStateSumary sumary, IProducer<string, AhStateSumary> p)
+        {
+            p.Produce(AuctionSumary, new Message<string, AhStateSumary> { Value = sumary, Key = "" }, r =>
+            {
+                if (r.Error.IsError || r.TopicPartitionOffset.Offset % 100 == 10)
+                    Console.WriteLine(!r.Error.IsError ?
+                        $"Delivered {r.Topic} {r.Offset} " :
+                        $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
+            });
         }
 
         public static bool ShouldPageBeDropped(int page)
@@ -593,9 +604,7 @@ namespace Coflnet.Sky.Updater
         private static ProducerConfig producerConfig = new ProducerConfig
         {
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 2,
-            BatchNumMessages = 100,
-            BatchSize = 50_000,
+            LingerMs = 10,
         };
 
         public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, IScope span)
