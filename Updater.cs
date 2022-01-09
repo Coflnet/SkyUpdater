@@ -587,7 +587,6 @@ namespace Coflnet.Sky.Updater
 
             if (apiUpdate != default)
                 a.FindTime = apiUpdate;
-
             return a;
         }
 
