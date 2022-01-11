@@ -130,7 +130,9 @@ namespace Coflnet.Sky.Updater
             while (page.LastUpdated <= lastUpdate)
             {
                 var tokenSource = new CancellationTokenSource();
-                httpClient.DefaultRequestHeaders.IfModifiedSince = updated.GetValueOrDefault(pageId, DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
+                if(!updated.TryGetValue(pageId, out DateTimeOffset offset))
+                    offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
+                httpClient.DefaultRequestHeaders.IfModifiedSince = offset;
                 using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
                 if (s.StatusCode == System.Net.HttpStatusCode.NotModified)
                 {
@@ -199,7 +201,7 @@ namespace Coflnet.Sky.Updater
                 LogHeaderName(siteSpan, s, "last-modified");
                 updated[pageId] = DateTimeOffset.Parse(lastModified);
 
-                Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} update: {page.LastUpdated}");
+                Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} update: {page.LastUpdated} took {tryCount} tries");
             }
             return (page.LastUpdated, age);
         }
