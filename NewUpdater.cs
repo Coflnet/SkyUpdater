@@ -22,7 +22,6 @@ namespace Coflnet.Sky.Updater
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
             LingerMs = 5
         };
-        private static HttpClient httpClient = new HttpClient();
 
         public async Task DoUpdates(int index, CancellationToken token)
         {
@@ -121,21 +120,23 @@ namespace Coflnet.Sky.Updater
             var tryCount = 0;
             var age = 0;
             string uuid = null;
+            HttpClient httpClient = new HttpClient();
+            try
+            {
+
+                updated.TryGetValue(pageId, out DateTimeOffset offset);
+                if (offset == default)
+                    offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
+                httpClient.DefaultRequestHeaders.IfModifiedSince = offset;
+            }
+            catch (Exception e)
+            {
+                dev.Logger.Instance.Error(e, "could not set default headers");
+            }
             while (page.LastUpdated <= lastUpdate)
             {
                 var tokenSource = new CancellationTokenSource();
-                updated.TryGetValue(pageId, out DateTimeOffset offset);
-                try
-                {
 
-                    if (offset == default)
-                        offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
-                    httpClient.DefaultRequestHeaders.IfModifiedSince = offset;
-                }
-                catch (Exception e)
-                {
-                    dev.Logger.Instance.Error(e, "could not set default headers");
-                }
                 using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
                 if (s.StatusCode == System.Net.HttpStatusCode.NotModified)
                 {
