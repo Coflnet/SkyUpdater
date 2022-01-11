@@ -48,7 +48,7 @@ namespace Coflnet.Sky.Updater
                             try
                             {
                                 var secondsAdjust = ageLookup.GetValueOrDefault(page) * 0.5;
-                                var waitTime = lastUpdate + TimeSpan.FromSeconds(69.9 - secondsAdjust) - DateTime.Now;
+                                var waitTime = lastUpdate + TimeSpan.FromSeconds(65 - secondsAdjust) - DateTime.Now;
                                 if (waitTime < TimeSpan.FromSeconds(0))
                                     waitTime = TimeSpan.FromSeconds(0);
                                 await Task.Delay(waitTime);
@@ -72,10 +72,8 @@ namespace Coflnet.Sky.Updater
                             }
                         }).ConfigureAwait(false));
                     }
-                    foreach (var item in tasks)
-                    {
-                        await item;
-                    }
+                    await tasks.First();
+                    await Task.Delay(2000); // allow two extra seconds for other pages
                     // wait for up to 10 seconds for any inflight messages to be delivered.
                     p.Flush(TimeSpan.FromSeconds(10));
 
@@ -114,6 +112,8 @@ namespace Coflnet.Sky.Updater
             return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build();
         }
 
+
+        private Dictionary<int, DateTimeOffset> updated = new Dictionary<int, DateTimeOffset>();
         private async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan)
         {
             if (Updater.ShouldPageBeDropped(pageId))
@@ -130,7 +130,15 @@ namespace Coflnet.Sky.Updater
             while (page.LastUpdated <= lastUpdate)
             {
                 var tokenSource = new CancellationTokenSource();
+                httpClient.DefaultRequestHeaders.IfModifiedSince = updated.GetValueOrDefault(pageId, DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
                 using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
+                if (s.StatusCode == System.Net.HttpStatusCode.NotModified)
+                {
+                    // this is a very cheap request
+                    await Task.Delay(REQUEST_BACKOF_DELAY / 3);
+                    tryCount++;
+                    continue;
+                }
                 if (s.StatusCode != System.Net.HttpStatusCode.OK)
                     throw new HttpRequestException();
                 //page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
@@ -148,12 +156,12 @@ namespace Coflnet.Sky.Updater
                     {
                         tokenSource.Cancel();
                         tryCount++;
-                        if(tryCount > 10)
+                        if (tryCount > 10)
                         {
                             // give up and retry next minute
                             return (lastUpdate, 0);
                         }
-                        siteSpan.Span.SetTag("try",tryCount);
+                        siteSpan.Span.SetTag("try", tryCount);
                         // wait for the server cache to refresh
                         await Task.Delay(REQUEST_BACKOF_DELAY * tryCount);
                         continue;
@@ -161,7 +169,9 @@ namespace Coflnet.Sky.Updater
                     reader.Read();
                     if (count == 0)
                     {
-                        using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("First").AsChildOf(siteSpan.Span).StartActive();
+                        using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("First")
+                            .WithTag("found",DateTime.Now.ToString())
+                            .AsChildOf(siteSpan.Span).StartActive();
                     }
                     await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")))
                     {
@@ -183,6 +193,11 @@ namespace Coflnet.Sky.Updater
                 LogHeaderName(siteSpan, s, "date");
                 LogHeaderName(siteSpan, s, "cf-ray");
                 int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
+                var lastModified = s.Headers.Where(h => h.Key.ToLower() == "last-modified").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
+                if (lastModified == null)
+                    lastModified = s.Headers.Where(h => h.Key.ToLower() == "date").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
+                LogHeaderName(siteSpan, s, "last-modified");
+                updated[pageId] = DateTimeOffset.Parse(lastModified);
 
                 Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} update: {page.LastUpdated}");
             }
