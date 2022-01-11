@@ -47,8 +47,7 @@ namespace Coflnet.Sky.Updater
                         {
                             try
                             {
-                                var secondsAdjust = ageLookup.GetValueOrDefault(page) * 0.5;
-                                var waitTime = lastUpdate + TimeSpan.FromSeconds(65 - secondsAdjust) - DateTime.Now;
+                                var waitTime = lastUpdate + TimeSpan.FromSeconds(65 ) - DateTime.Now;
                                 if (waitTime < TimeSpan.FromSeconds(0))
                                     waitTime = TimeSpan.FromSeconds(0);
                                 await Task.Delay(waitTime);
@@ -56,11 +55,6 @@ namespace Coflnet.Sky.Updater
                                 var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
                                 if (page < 20)
                                     lastUpdate = time.Item1;
-                                if (secondsAdjust > 0)
-                                    span.Span.Log($"adjusted page {page} by {secondsAdjust}");
-                                if (time.Item2 < 3)
-                                    ageLookup[page] = time.Item2;
-
                             }
                             catch (HttpRequestException e)
                             {
@@ -73,7 +67,7 @@ namespace Coflnet.Sky.Updater
                         }).ConfigureAwait(false));
                     }
                     await tasks.First();
-                    await Task.Delay(2000); // allow two extra seconds for other pages
+                    await Task.Delay(1000); // allow an extra seconds for other pages
                     // wait for up to 10 seconds for any inflight messages to be delivered.
                     p.Flush(TimeSpan.FromSeconds(10));
 
