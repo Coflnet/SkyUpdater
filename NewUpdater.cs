@@ -47,7 +47,7 @@ namespace Coflnet.Sky.Updater
                         {
                             try
                             {
-                                var waitTime = lastUpdate + TimeSpan.FromSeconds(65 ) - DateTime.Now;
+                                var waitTime = lastUpdate + TimeSpan.FromSeconds(65) - DateTime.Now;
                                 if (waitTime < TimeSpan.FromSeconds(0))
                                     waitTime = TimeSpan.FromSeconds(0);
                                 await Task.Delay(waitTime);
@@ -124,9 +124,18 @@ namespace Coflnet.Sky.Updater
             while (page.LastUpdated <= lastUpdate)
             {
                 var tokenSource = new CancellationTokenSource();
-                if(!updated.TryGetValue(pageId, out DateTimeOffset offset))
-                    offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
-                httpClient.DefaultRequestHeaders.IfModifiedSince = offset;
+                updated.TryGetValue(pageId, out DateTimeOffset offset);
+                try
+                {
+
+                    if (offset == default)
+                        offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
+                    httpClient.DefaultRequestHeaders.IfModifiedSince = offset;
+                }
+                catch (Exception e)
+                {
+                    dev.Logger.Instance.Error(e, "could not set default headers");
+                }
                 using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
                 if (s.StatusCode == System.Net.HttpStatusCode.NotModified)
                 {
@@ -166,7 +175,7 @@ namespace Coflnet.Sky.Updater
                     if (count == 0)
                     {
                         using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("First")
-                            .WithTag("found",DateTime.Now.ToString())
+                            .WithTag("found", DateTime.Now.ToString())
                             .AsChildOf(siteSpan.Span).StartActive();
                     }
                     await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")))
