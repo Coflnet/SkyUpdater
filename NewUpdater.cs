@@ -31,6 +31,7 @@ namespace Coflnet.Sky.Updater
             while (!token.IsCancellationRequested)
             {
                 Console.WriteLine("Starting new updater " + DateTime.Now);
+                var updateScopeTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(50));
                 try
                 {
                     var tracer = OpenTracing.Util.GlobalTracer.Instance;
@@ -51,7 +52,7 @@ namespace Coflnet.Sky.Updater
                                     waitTime = TimeSpan.FromSeconds(0);
                                 await Task.Delay(waitTime);
                                 using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
-                                var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
+                                var time = await GetAndSavePage(page, p, lastUpdate, siteSpan, updateScopeTokenSource.Token);
                                 if (page < 20)
                                     lastUpdate = time.Item1;
                             }
@@ -65,8 +66,10 @@ namespace Coflnet.Sky.Updater
                             }
                         }).ConfigureAwait(false));
                     }
-                    await tasks.First();
-                    await Task.Delay(1000); // allow an extra seconds for other pages
+                    foreach (var item in tasks)
+                    {
+                        await item;
+                    }
                     // wait for up to 10 seconds for any inflight messages to be delivered.
                     p.Flush(TimeSpan.FromSeconds(10));
 
@@ -107,7 +110,7 @@ namespace Coflnet.Sky.Updater
 
 
         private Dictionary<int, DateTimeOffset> updated = new Dictionary<int, DateTimeOffset>();
-        private async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan)
+        private async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan, CancellationToken token)
         {
             if (Updater.ShouldPageBeDropped(pageId))
             {
@@ -133,11 +136,9 @@ namespace Coflnet.Sky.Updater
             {
                 dev.Logger.Instance.Error(e, "could not set default headers");
             }
-            while (page.LastUpdated <= lastUpdate)
+            while (page.LastUpdated <= lastUpdate && !token.IsCancellationRequested)
             {
-                var tokenSource = new CancellationTokenSource();
-
-                using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
+                using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
                 if (s.StatusCode == System.Net.HttpStatusCode.NotModified)
                 {
                     // this is a very cheap request
@@ -160,7 +161,6 @@ namespace Coflnet.Sky.Updater
                     page._lastUpdated = (long)reader.Value;
                     if (page.LastUpdated <= lastUpdate)
                     {
-                        tokenSource.Cancel();
                         tryCount++;
                         if (tryCount > 10)
                         {
