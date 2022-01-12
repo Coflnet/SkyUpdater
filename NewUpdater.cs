@@ -39,7 +39,7 @@ namespace Coflnet.Sky.Updater
                     using var p = GetProducer();
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
-                    Console.WriteLine($"starting downloads {DateTime.Now}");
+                    Console.WriteLine($"starting downloads {DateTime.Now} from {lastUpdate}");
                     for (int i = 0; i < 9; i++)
                     {
                         var page = index + i * 10;
@@ -53,7 +53,7 @@ namespace Coflnet.Sky.Updater
                                 await Task.Delay(waitTime);
                                 using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
                                 var time = await GetAndSavePage(page, p, lastUpdate, siteSpan, updateScopeTokenSource.Token);
-                                if (page < 20)
+                                if (page < 20 && time.Item1 > new DateTime(2022,1,1))
                                     lastUpdate = time.Item1;
                             }
                             catch (HttpRequestException e)
