@@ -22,6 +22,7 @@ namespace Coflnet.Sky.Updater
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
             LingerMs = 5
         };
+        private HttpClient httpClient = new HttpClient();
 
         public async Task DoUpdates(int index, CancellationToken token)
         {
@@ -40,20 +41,20 @@ namespace Coflnet.Sky.Updater
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
                     Console.WriteLine($"starting downloads {DateTime.Now} from {lastUpdate}");
-                    for (int i = 0; i < 9; i++)
+                    for (int i = 0; i < 4; i++)
                     {
                         var page = index + i * 10;
                         tasks.Add(Task.Run(async () =>
                         {
                             try
                             {
-                                var waitTime = lastUpdate + TimeSpan.FromSeconds(65) - DateTime.Now;
+                                var waitTime = lastUpdate + TimeSpan.FromSeconds(64) - DateTime.Now;
                                 if (waitTime < TimeSpan.FromSeconds(0))
                                     waitTime = TimeSpan.FromSeconds(0);
                                 await Task.Delay(waitTime);
                                 using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
                                 var time = await GetAndSavePage(page, p, lastUpdate, siteSpan, updateScopeTokenSource.Token);
-                                if (page < 20 && time.Item1 > new DateTime(2022,1,1))
+                                if (page < 20 && time.Item1 > new DateTime(2022, 1, 1))
                                     lastUpdate = time.Item1;
                             }
                             catch (HttpRequestException e)
@@ -92,7 +93,7 @@ namespace Coflnet.Sky.Updater
                     }
                     var time = lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now;
                     Updater.lastUpdateDone = lastUpdate;
-                    Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(65)} " + time);
+                    Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(60)} " + time);
                     await Task.Delay(time < TimeSpan.Zero ? TimeSpan.Zero : time);
                 }
                 catch (Exception e)
@@ -123,23 +124,28 @@ namespace Coflnet.Sky.Updater
             var tryCount = 0;
             var age = 0;
             string uuid = null;
-            HttpClient httpClient = new HttpClient();
-            try
-            {
 
-                updated.TryGetValue(pageId, out DateTimeOffset offset);
-                if (offset == default)
-                    offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
-                httpClient.DefaultRequestHeaders.IfModifiedSince = offset;
-            }
-            catch (Exception e)
-            {
-                dev.Logger.Instance.Error(e, "could not set default headers");
-            }
             while (page.LastUpdated <= lastUpdate && !token.IsCancellationRequested)
             {
-                using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-                if (s.StatusCode == System.Net.HttpStatusCode.NotModified)
+                var message = new HttpRequestMessage(HttpMethod.Post, "https://api.hypixel.net/skyblock/auctions?page=" + pageId);
+                try
+                {
+
+                    updated.TryGetValue(pageId, out DateTimeOffset offset);
+                    if (offset == default)
+                        offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(20));
+                    message.Headers.IfModifiedSince = offset + TimeSpan.FromSeconds(10);
+                }
+                catch (Exception e)
+                {
+                    dev.Logger.Instance.Error(e, "could not set default headers");
+                }
+                message.Headers.From = "Coflnet";
+                using var s = await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+                var response = DateTime.Now;
+
+                //using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+                if (s.StatusCode != System.Net.HttpStatusCode.OK)
                 {
                     // this is a very cheap request
                     await Task.Delay(REQUEST_BACKOF_DELAY / 3);
@@ -205,7 +211,7 @@ namespace Coflnet.Sky.Updater
                 LogHeaderName(siteSpan, s, "last-modified");
                 updated[pageId] = DateTimeOffset.Parse(lastModified);
 
-                Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} update: {page.LastUpdated} took {tryCount} tries");
+                Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} got: {response} took {tryCount} tries");
             }
             return (page.LastUpdated, age);
         }
