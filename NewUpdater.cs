@@ -41,7 +41,7 @@ namespace Coflnet.Sky.Updater
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
                     Console.WriteLine($"starting downloads {DateTime.Now} from {lastUpdate}");
-                    for (int i = 0; i < 4; i++)
+                    for (int i = 0; i < 9; i++)
                     {
                         var page = index + i * 10;
                         tasks.Add(Task.Run(async () =>
