@@ -32,7 +32,7 @@ namespace Coflnet.Sky.Updater
             while (!token.IsCancellationRequested)
             {
                 Console.WriteLine("Starting new updater " + DateTime.Now);
-                var updateScopeTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(50));
+                var updateScopeTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 try
                 {
                     var tracer = OpenTracing.Util.GlobalTracer.Instance;
@@ -124,10 +124,11 @@ namespace Coflnet.Sky.Updater
             var tryCount = 0;
             var age = 0;
             string uuid = null;
+            var method = HttpMethod.Post;
 
             while (page.LastUpdated <= lastUpdate && !token.IsCancellationRequested)
             {
-                var message = new HttpRequestMessage(HttpMethod.Post, "https://api.hypixel.net/skyblock/auctions?page=" + pageId);
+                var message = new HttpRequestMessage(method, "https://api.hypixel.net/skyblock/auctions?page=" + pageId);
                 try
                 {
 
