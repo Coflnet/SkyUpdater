@@ -14,7 +14,7 @@ namespace Coflnet.Sky.Updater
 {
     public class ItemDetailsExtractor
     {
-        public Dictionary<string, Item> Items => ItemDetails.Instance.Items;
+        public ConcurrentDictionary<string, Item> Items => ItemDetails.Instance.Items;
         private static ConcurrentDictionary<string, DBItem> ToFillDetails = new ConcurrentDictionary<string, DBItem>();
 
         public void LoadToFill()
@@ -76,7 +76,7 @@ namespace Coflnet.Sky.Updater
                 }
                 item.AltNames.Add(name);
                 Items[id] = item;
-                Items.Remove(name);
+                Items.Remove(name, out _);
 
                 return;
             }
