@@ -47,7 +47,7 @@ namespace Coflnet.Sky.Updater
                     try
                     {
                         // prefilter
-                        var toCheck = auctions.Where(a=>a.End > DateTime.UtcNow + TimeSpan.FromHours(1)).ToList();
+                        var toCheck = auctions.Where(a=>a.End > DateTime.UtcNow - TimeSpan.FromHours(1)).ToList();
                         if(toCheck.Count == 0)
                         {
                             Console.WriteLine($"skipped batch because to old {auctions.FirstOrDefault()?.Uuid} " + auctions.FirstOrDefault()?.End);
