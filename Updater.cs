@@ -507,7 +507,7 @@ namespace Coflnet.Sky.Updater
             var count = 0;
             if (updaterIndex == 0 || updaterIndex == 1)
             {
-                await Task.Delay(8000);
+                await Task.Delay(6000);
                 foreach (var a in res.Auctions)
                 {
                     // updater can't write to db so no need to tell the extractor
