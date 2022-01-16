@@ -42,8 +42,9 @@ namespace Coflnet.Sky.Updater
 
         public static void GrabAuctions(HypixelApi hypixelApi)
         {
+            var method = Updater.updaterIndex % 2 == 0 ? RestSharp.Method.GET : RestSharp.Method.POST;
             using var span = GlobalTracer.Instance.BuildSpan("SoldAuctions").StartActive();
-            var expired = hypixelApi.getAuctionsEnded();
+            var expired = hypixelApi.getAuctionsEnded(method);
             var auctions = expired.Auctions.Select(item =>
             {
                 var a = new SaveAuction()
