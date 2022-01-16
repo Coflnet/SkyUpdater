@@ -16,6 +16,7 @@ namespace Coflnet.Sky.Updater
             Configuration = configuration;
         }
 
+        private static string AuctionEndedTopic = SimplerConfig.Config.Instance["TOPICS:AUCTION_ENDED"];
         public IConfiguration Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
@@ -28,6 +29,7 @@ namespace Coflnet.Sky.Updater
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "SkyUpdater", Version = "v1" });
             });
             services.AddJaeger(0.5);
+            services.AddHostedService<MissingChecker>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

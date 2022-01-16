@@ -34,8 +34,8 @@ namespace Coflnet.Sky.Updater
         private static string MissingAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:MISSING_AUCTION"];
         private static string SoldAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:SOLD_AUCTION"];
         public static readonly string NewAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_AUCTION"];
-        private static string AuctionEndedTopic = SimplerConfig.Config.Instance["TOPICS:AUCTION_ENDED"];
-        private static string NewBidsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_BID"];
+        public static string AuctionEndedTopic = SimplerConfig.Config.Instance["TOPICS:AUCTION_ENDED"];
+        public static string NewBidsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_BID"];
         private static string AuctionSumary = SimplerConfig.Config.Instance["TOPICS:AH_SUMARY"];
         private static int DropOffset = Int32.Parse(SimplerConfig.Config.Instance["DROP_OFFSET"] ?? "0");
 

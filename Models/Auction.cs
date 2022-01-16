@@ -81,7 +81,7 @@ namespace Coflnet.Sky.Updater.Models
 
         [JsonPropertyName("item_bytes")]
         [Newtonsoft.Json.JsonProperty("item_bytes")]
-        public string ItemBytes { get; set; }
+        public virtual string ItemBytes { get; set; }
 
         [JsonPropertyName("highest_bid_amount")]
         [Newtonsoft.Json.JsonProperty("highest_bid_amount")]

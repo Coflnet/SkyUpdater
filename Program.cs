@@ -17,7 +17,6 @@ namespace Coflnet.Sky.Updater
         {
             var bazzar = new BazaarUpdater();
             var updater = new Updater(null);
-            FileController.dataPaht = "/data";
             var loading = hypixel.ItemDetails.Instance.LoadFromDB();
 
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
