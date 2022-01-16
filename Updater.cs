@@ -508,6 +508,7 @@ namespace Coflnet.Sky.Updater
             if (updaterIndex == 0 || updaterIndex == 1)
             {
                 await Task.Delay(8000);
+                var errorCount = 0;
                 foreach (var a in res.Auctions)
                 {
                     try
@@ -516,7 +517,8 @@ namespace Coflnet.Sky.Updater
                     }
                     catch (Exception e)
                     {
-                        Logger.Instance.Error(e, $"extracting details");
+                        if (errorCount++ < 5)
+                            Logger.Instance.Error(e, $"extracting details");
                     }
                     count++;
                     var auction = ConvertAuction(a);
