@@ -36,7 +36,7 @@ namespace Coflnet.Sky.Updater
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var keys = config["API_KEY"].Split(",");
-            if(keys.Length < Updater.updaterIndex)
+            if(keys.Length <= Updater.updaterIndex)
                 return; // no key for this instance
             apiKey = keys[Updater.updaterIndex];
             await Kafka.KafkaConsumer.ConsumeBatch<SaveAuction>(
