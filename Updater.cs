@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -145,7 +146,7 @@ namespace Coflnet.Sky.Updater
             object sumloc = new object();
             var page = updaterIndex * 10;
 
-            var firstPage = await LoadPage(page).ConfigureAwait(false);
+            var firstPage = await LoadPage(page, lastUpdate).ConfigureAwait(false);
             Console.WriteLine($"Updating Data {DateTime.Now} " + firstPage.WasSuccessful);
 
             max = (int)firstPage.TotalPages;
@@ -153,7 +154,7 @@ namespace Coflnet.Sky.Updater
             {
                 // wait for the server cache to refresh
                 await Task.Delay(REQUEST_BACKOF_DELAY);
-                firstPage = await LoadPage(page).ConfigureAwait(false);
+                firstPage = await LoadPage(page, lastUpdate).ConfigureAwait(false);
             }
             OnNewUpdateStart?.Invoke();
 
@@ -190,7 +191,7 @@ namespace Coflnet.Sky.Updater
                             AuctionPage res;
                             using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                             {
-                                res = index != 0 ? await LoadPage(page).ConfigureAwait(false) : firstPage;
+                                res = index != 0 ? await LoadPage(page, lastUpdate).ConfigureAwait(false) : firstPage;
                             }
                             while (res == null || res.LastUpdated == updateStartTime)
                             {
@@ -198,7 +199,7 @@ namespace Coflnet.Sky.Updater
                                 await Task.Delay(REQUEST_BACKOF_DELAY * 3);
                                 using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                                 {
-                                    res = await LoadPage(page).ConfigureAwait(false);
+                                    res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
                                 }
                             }
                             if (res == null)
@@ -232,7 +233,7 @@ namespace Coflnet.Sky.Updater
                             scope.Span.SetTag("error", true);
                             try // again
                             {
-                                var res = await LoadPage(page).ConfigureAwait(false);
+                                var res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
                                 var val = await Save(res, lastUpdate, sumary, p, scope.Span.Context);
                             }
                             catch (System.Exception)
@@ -314,13 +315,19 @@ namespace Coflnet.Sky.Updater
             return (page + DropOffset) % 60 == DateTime.Now.Minute;
         }
 
-        private static async Task<AuctionPage> LoadPage(int page)
+        private static async Task<AuctionPage> LoadPage(int page, DateTime latUpdate)
         {
             var client = new RestClient("https://api.hypixel.net/skyblock");
             var request = new RestRequest($"auctions?page={page}", Method.GET);
+            request.AddHeader("If-Modified-Since", FormatTime(latUpdate));
             //Get the response and Deserialize
 
             var response = await client.ExecuteAsync(request).ConfigureAwait(false);
+            if(response.StatusCode == System.Net.HttpStatusCode.NotModified)
+            {
+                Console.Write(" not modified " + page);
+                return null;
+            }
             try
             {
                 return JsonSerializer.Deserialize<AuctionPage>(response.Content);
@@ -331,6 +338,11 @@ namespace Coflnet.Sky.Updater
                 Console.WriteLine("status " + response.StatusCode);
                 throw e;
             }
+        }
+
+        public static string FormatTime(DateTime time)
+        {
+            return new DateTimeOffset(time.ToUniversalTime()).ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'",CultureInfo.InvariantCulture);
         }
 
         /// <summary>
@@ -437,8 +449,8 @@ namespace Coflnet.Sky.Updater
 
         private static async Task WaitForServerCacheRefresh(DateTime hypixelCacheTime)
         {
-            // cache refreshes every 60 seconds, delayed by 10, 1 seconds extra to fix timing issues
-            var timeToSleep = hypixelCacheTime.Add(TimeSpan.FromSeconds(71)) - DateTime.Now;
+            // cache refreshes every 60 seconds, delayed by 10
+            var timeToSleep = hypixelCacheTime.Add(TimeSpan.FromSeconds(69)) - DateTime.Now;
             if (timeToSleep.Seconds > 0)
                 await Task.Delay(timeToSleep);
         }
