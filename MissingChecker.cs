@@ -83,7 +83,9 @@ namespace Coflnet.Sky.Updater
 
                         //Get the response and Deserialize
                         var response = await client.ExecuteAsync(request).ConfigureAwait(false);
-                        var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response.Content);
+                        if(response.StatusCode != System.Net.HttpStatusCode.OK)
+                            return;
+                        var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
                         foreach (var auction in responseDeserialized.Auctions)
                         {
                             var target = auctions.Where(a=>a.Uuid == auction.Uuid).FirstOrDefault();

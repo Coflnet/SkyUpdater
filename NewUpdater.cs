@@ -48,7 +48,7 @@ namespace Coflnet.Sky.Updater
                         {
                             try
                             {
-                                var waitTime = lastUpdate + TimeSpan.FromSeconds(64) - DateTime.Now;
+                                var waitTime = lastUpdate + TimeSpan.FromSeconds(63.5) - DateTime.Now;
                                 if (waitTime < TimeSpan.FromSeconds(0))
                                     waitTime = TimeSpan.FromSeconds(0);
                                 await Task.Delay(waitTime);
@@ -56,6 +56,10 @@ namespace Coflnet.Sky.Updater
                                 var time = await GetAndSavePage(page, p, lastUpdate, siteSpan, updateScopeTokenSource.Token);
                                 if (page < 20 && time.Item1 > new DateTime(2022, 1, 1))
                                     lastUpdate = time.Item1;
+                            }
+                            catch(TaskCanceledException)
+                            {
+                                dev.Logger.Instance.Info("canceled page" + page);
                             }
                             catch (HttpRequestException e)
                             {
@@ -94,7 +98,7 @@ namespace Coflnet.Sky.Updater
                     var time = lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now;
                     Updater.lastUpdateDone = lastUpdate;
                     Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(60)} " + time);
-                    await Task.Delay(time < TimeSpan.Zero ? TimeSpan.Zero : time);
+                    await Task.Delay(time < TimeSpan.Zero ? TimeSpan.FromSeconds(2) : time);
                 }
                 catch (Exception e)
                 {
