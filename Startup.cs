@@ -46,8 +46,6 @@ namespace Coflnet.Sky.Updater
                 c.RoutePrefix = "api";
             });
 
-            app.UseHttpsRedirection();
-
             app.UseRouting();
 
             app.UseAuthorization();

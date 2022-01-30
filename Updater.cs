@@ -422,7 +422,7 @@ namespace Coflnet.Sky.Updater
                     return;
                 }
                 Console.WriteLine("Starting updater with index " + updaterIndex);
-                while (true)
+                while (!token.IsCancellationRequested)
                 {
                     try
                     {

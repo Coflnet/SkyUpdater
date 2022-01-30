@@ -23,6 +23,7 @@ namespace Coflnet.Sky.Updater
             LingerMs = 5
         };
         private HttpClient httpClient = new HttpClient();
+        private int lastPageCount = 100;
 
         public async Task DoUpdates(int index, CancellationToken token)
         {
@@ -41,7 +42,7 @@ namespace Coflnet.Sky.Updater
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
                     Console.WriteLine($"starting downloads {DateTime.Now} from {lastUpdate}");
-                    for (int i = 0; i < 9; i++)
+                    for (int i = 0; i < lastPageCount / 10; i++)
                     {
                         var page = index + i * 10;
                         tasks.Add(Task.Run(async () =>
@@ -163,9 +164,14 @@ namespace Coflnet.Sky.Updater
 
                 var serializer = new Newtonsoft.Json.JsonSerializer();
                 using (StreamReader sr = new StreamReader(s.Content.ReadAsStream()))
-                using (JsonReader reader = new JsonTextReader(sr))
+                using (var reader = new JsonTextReader(sr))
                 {
-                    for (int i = 0; i < 11; i++)
+                    for (int i = 0; i < 6; i++)
+                    {
+                        reader.Read();
+                    }
+                    lastPageCount = reader.ReadAsInt32() ?? 100;
+                    for (int i = 0; i < 4; i++)
                     {
                         reader.Read();
                     }
