@@ -328,6 +328,11 @@ namespace Coflnet.Sky.Updater
                 Console.Write(" not modified " + page);
                 return null;
             }
+            if(response.Content.Length == 0)
+            {
+                Console.WriteLine(" | response empty " + page);
+                return null;
+            }
             try
             {
                 return JsonSerializer.Deserialize<AuctionPage>(response.Content);

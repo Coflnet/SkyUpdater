@@ -63,7 +63,7 @@ namespace Coflnet.Sky.Updater
                     }
 
 
-                }, stoppingToken, "sky-updater", 100);
+                }, stoppingToken, "sky-updater", 50);
         }
 
         private async Task CheckBatch(IEnumerable<SaveAuction> auctions)
