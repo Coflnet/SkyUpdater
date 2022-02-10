@@ -42,36 +42,35 @@ namespace Coflnet.Sky.Updater
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
                     Console.WriteLine($"starting downloads {DateTime.Now} from {lastUpdate}");
-                    for (int i = 0; i < lastPageCount / 10; i++)
+
+                    var page = 0;
+                    tasks.Add(Task.Run(async () =>
                     {
-                        var page = index + i * 10;
-                        tasks.Add(Task.Run(async () =>
+                        try
                         {
-                            try
-                            {
-                                var waitTime = lastUpdate + TimeSpan.FromSeconds(63.5) - DateTime.Now;
-                                if (waitTime < TimeSpan.FromSeconds(0))
-                                    waitTime = TimeSpan.FromSeconds(0);
-                                await Task.Delay(waitTime);
-                                using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
-                                var time = await GetAndSavePage(page, p, lastUpdate, siteSpan, updateScopeTokenSource.Token);
-                                if (page < 20 && time.Item1 > new DateTime(2022, 1, 1))
-                                    lastUpdate = time.Item1;
-                            }
-                            catch(TaskCanceledException)
-                            {
-                                dev.Logger.Instance.Info("canceled page" + page);
-                            }
-                            catch (HttpRequestException e)
-                            {
-                                Console.WriteLine("could not get page " + page);
-                            }
-                            catch (Exception e)
-                            {
-                                dev.Logger.Instance.Error(e, "update page " + page + e.GetType().Name);
-                            }
-                        }).ConfigureAwait(false));
-                    }
+                            var waitTime = lastUpdate + TimeSpan.FromSeconds(63.5) - DateTime.Now;
+                            if (waitTime < TimeSpan.FromSeconds(0))
+                                waitTime = TimeSpan.FromSeconds(0);
+                            await Task.Delay(waitTime);
+                            using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
+                            var time = await GetAndSavePage(page, p, lastUpdate, siteSpan, updateScopeTokenSource.Token);
+                            if (page < 20 && time.Item1 > new DateTime(2022, 1, 1))
+                                lastUpdate = time.Item1;
+                        }
+                        catch (TaskCanceledException)
+                        {
+                            dev.Logger.Instance.Info("canceled page" + page);
+                        }
+                        catch (HttpRequestException e)
+                        {
+                            Console.WriteLine("could not get page " + page);
+                        }
+                        catch (Exception e)
+                        {
+                            dev.Logger.Instance.Error(e, "update page " + page + e.GetType().Name);
+                        }
+                    }).ConfigureAwait(false));
+
                     foreach (var item in tasks)
                     {
                         await item;
@@ -196,10 +195,10 @@ namespace Coflnet.Sky.Updater
                             .WithTag("found", DateTime.Now.ToString())
                             .AsChildOf(siteSpan.Span).StartActive();
                     }
+                    var minTime = lastUpdate - TimeSpan.FromSeconds(20);
                     await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")))
                     {
-
-                        if (auction.Start < lastUpdate)
+                        if (auction.Start < minTime)
                             continue;
 
                         var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).Start();
