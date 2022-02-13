@@ -20,7 +20,7 @@ namespace Coflnet.Sky.Updater
         private static ProducerConfig producerConfig = new ProducerConfig
         {
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 5
+            LingerMs = 10
         };
         private HttpClient httpClient = new HttpClient();
         private int lastPageCount = 100;

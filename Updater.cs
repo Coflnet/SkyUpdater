@@ -277,7 +277,7 @@ namespace Coflnet.Sky.Updater
             if (updaterIndex <= 1)
                 using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
                 {
-                    Console.WriteLine("delivering sumary, size: " + MessagePack.MessagePackSerializer.Serialize(sumary).Length);
+                    Console.WriteLine($"delivering sumary, size: {MessagePack.MessagePackSerializer.Serialize(sumary).Length}  {sumary.ActiveAuctions.Count}" );
                     sumary.Time = DateTime.Now;
                     var p1 = sumary.ActiveAuctions.Take(sumary.ActiveAuctions.Count / 2);
                     var p2 = sumary.ActiveAuctions.Skip(p1.Count());
