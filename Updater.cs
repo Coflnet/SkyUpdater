@@ -169,7 +169,7 @@ namespace Coflnet.Sky.Updater
 
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
-                for (int loopIndexNotUse = 0; loopIndexNotUse < max; loopIndexNotUse++)
+                for (int loopIndexNotUse = 0; loopIndexNotUse <= max; loopIndexNotUse++)
                 {
                     var index = loopIndexNotUse;
                     await Task.Delay(MillisecondsDelay);
