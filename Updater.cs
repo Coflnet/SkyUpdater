@@ -182,7 +182,7 @@ namespace Coflnet.Sky.Updater
                             var page = index;
 
                             if (updaterIndex == 1)
-                                page = max - index;
+                                page = max - index -1;
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
 
