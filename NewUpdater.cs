@@ -11,19 +11,21 @@ using Coflnet.Sky.Updater.Models;
 using Confluent.Kafka;
 using hypixel;
 using Newtonsoft.Json;
+using RestSharp;
 
 namespace Coflnet.Sky.Updater
 {
     public class NewUpdater
     {
         private const int REQUEST_BACKOF_DELAY = 180;
+        protected virtual string ApiBaseUrl => "https://api.hypixel.net";
         private static ProducerConfig producerConfig = new ProducerConfig
         {
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 10
+            LingerMs = 10,
+            LogConnectionClose = false
         };
-        private HttpClient httpClient = new HttpClient();
-        private int lastPageCount = 100;
+        private static HttpClient httpClient = new HttpClient();
 
         public async Task DoUpdates(int index, CancellationToken token)
         {
@@ -32,8 +34,6 @@ namespace Coflnet.Sky.Updater
             var ageLookup = new Dictionary<int, int>();
             while (!token.IsCancellationRequested)
             {
-                Console.WriteLine("Starting new updater " + DateTime.Now);
-                var updateScopeTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 try
                 {
                     var tracer = OpenTracing.Util.GlobalTracer.Instance;
@@ -41,39 +41,32 @@ namespace Coflnet.Sky.Updater
                     using var p = GetProducer();
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
-                    Console.WriteLine($"starting downloads {DateTime.Now} from {lastUpdate}");
-
+                    Console.WriteLine($"starting downloads {DateTime.Now}");
                     var page = 0;
-                    tasks.Add(Task.Run(async () =>
+                    try
                     {
-                        try
-                        {
-                            var waitTime = lastUpdate + TimeSpan.FromSeconds(63.5) - DateTime.Now;
-                            if (waitTime < TimeSpan.FromSeconds(0))
-                                waitTime = TimeSpan.FromSeconds(0);
-                            await Task.Delay(waitTime);
-                            using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
-                            var time = await GetAndSavePage(page, p, lastUpdate, siteSpan, updateScopeTokenSource.Token);
-                            if (page < 20 && time.Item1 > new DateTime(2022, 1, 1))
-                                lastUpdate = time.Item1;
-                        }
-                        catch (TaskCanceledException)
-                        {
-                            dev.Logger.Instance.Info("canceled page" + page);
-                        }
-                        catch (HttpRequestException e)
-                        {
-                            Console.WriteLine("could not get page " + page);
-                        }
-                        catch (Exception e)
-                        {
-                            dev.Logger.Instance.Error(e, "update page " + page + e.GetType().Name);
-                        }
-                    }).ConfigureAwait(false));
-
-                    foreach (var item in tasks)
+                        var waitTime = lastUpdate + TimeSpan.FromSeconds(62.4) - DateTime.Now;
+                        if (waitTime < TimeSpan.FromSeconds(0))
+                            waitTime = TimeSpan.FromSeconds(0);
+                        await Task.Delay(waitTime);
+                        using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
+                        DateTime time = await DoOneUpdate(lastUpdate, p, page, siteSpan);
+                        //var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
+                        if (page < 20)
+                            lastUpdate = time;
+                    }
+                    catch (TaskCanceledException)
                     {
-                        await item;
+                        Console.Write("canceled " + page);
+                    }
+                    catch (HttpRequestException e)
+                    {
+                        Console.WriteLine($"could not get page {page} because {e.Message}\n{e.StackTrace}");
+                    }
+                    catch (Exception e)
+                    {
+                        dev.Logger.Instance.Error(e, "update page " + page + e.GetType().Name);
+                        await Task.Delay(500);
                     }
                     // wait for up to 10 seconds for any inflight messages to be delivered.
                     p.Flush(TimeSpan.FromSeconds(10));
@@ -86,26 +79,32 @@ namespace Coflnet.Sky.Updater
                     Console.WriteLine($"Age: {response.Headers.Where(a=>a.Key == "Age").Select(a=>a.Value).FirstOrDefault()?.FirstOrDefault()}");
                    */
 
-                    Updater.LastPull = lastUpdate;
-                    try
-                    {
-                        BinUpdater.GrabAuctions(new Hypixel.NET.HypixelApi(null, 0));
-                    }
-                    catch (Exception e)
-                    {
-                        dev.Logger.Instance.Error(e, "updating sells ");
-                    }
-                    var time = lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now;
                     Updater.lastUpdateDone = lastUpdate;
-                    Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(60)} " + time);
-                    await Task.Delay(time < TimeSpan.Zero ? TimeSpan.FromSeconds(2) : time);
+                    var binupdate = await Task.Run(() => BinUpdater.DownloadSells(ApiBaseUrl)).ConfigureAwait(false);
+                    ProduceSells(binupdate);
+                    var tookTime = lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now;
+                    Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(60)} " + tookTime);
+                    await Task.Delay(tookTime < TimeSpan.Zero ? TimeSpan.FromMilliseconds(500) : tookTime);
                 }
                 catch (Exception e)
                 {
                     dev.Logger.Instance.Error(e, "updating ");
                 }
             }
+            Console.WriteLine("stopped updating");
 
+        }
+
+        protected virtual async Task<DateTime> DoOneUpdate(DateTime lastUpdate, IProducer<string, SaveAuction> p, int page, OpenTracing.IScope siteSpan)
+        {
+            var pageToken = new CancellationTokenSource(20000);
+            var result = await GetAndSavePage(page,p,lastUpdate,siteSpan,pageToken,0);
+            return result.Item1;
+        }
+
+        protected virtual void ProduceSells(List<SaveAuction> binupdate)
+        {
+            Updater.AddSoldAuctions(binupdate, null);
         }
 
         protected virtual IProducer<string, SaveAuction> GetProducer()
@@ -114,63 +113,71 @@ namespace Coflnet.Sky.Updater
         }
 
 
-        private Dictionary<int, DateTimeOffset> updated = new Dictionary<int, DateTimeOffset>();
-        private async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan, CancellationToken token)
+        protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0)
         {
-            if (Updater.ShouldPageBeDropped(pageId))
-            {
-                using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("DropPage").AsChildOf(siteSpan.Span).StartActive();
-                return (lastUpdate, 0);
-            }
+            await Task.Delay(iter * 200);
+            if (pageUpdate.Token.IsCancellationRequested)
+                return (lastUpdate, -1);
             var time = lastUpdate.ToUnix() * 1000;
             var page = new AuctionPage();
+            var client = GetClient();
             var count = 0;
             var tryCount = 0;
             var age = 0;
             string uuid = null;
-            var method = HttpMethod.Post;
-
-            while (page.LastUpdated <= lastUpdate && !token.IsCancellationRequested)
+            var overallUpdateCancle = new CancellationTokenSource(20000);
+            if (pageUpdate != null)
+                overallUpdateCancle = pageUpdate;
+            var start = DateTime.Now;
+            while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
             {
-                var message = new HttpRequestMessage(method, "https://api.hypixel.net/skyblock/auctions?page=" + pageId);
+                var downloadStart = DateTime.Now;
+                var minModTime = DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
+                var message = new HttpRequestMessage(HttpMethod.Post, ApiBaseUrl + "/skyblock/auctions?page=" + pageId);
+                message.Headers.IfModifiedSince = minModTime;
+                message.Headers.From = "Coflnet";
+                CancellationTokenSource tokenSource;
+                HttpResponseMessage s;
                 try
                 {
-
-                    updated.TryGetValue(pageId, out DateTimeOffset offset);
-                    if (offset == default)
-                        offset = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(20));
-                    message.Headers.IfModifiedSince = offset + TimeSpan.FromSeconds(10);
+                    // create new token with timeout
+                    tokenSource = new CancellationTokenSource();
+                    overallUpdateCancle.Token.Register(tokenSource.Cancel);
+                    s = await NewMethod(tokenSource, message).ConfigureAwait(false);
+                    tokenSource.Cancel();
                 }
-                catch (Exception e)
+                catch (TaskCanceledException)
                 {
-                    dev.Logger.Instance.Error(e, "could not set default headers");
+                    Console.Write("canceled");
+                    return (lastUpdate, 0); // was not fast enough
                 }
-                message.Headers.From = "Coflnet";
-                using var s = await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-                var response = DateTime.Now;
-
-                //using var s = await httpClient.GetAsync("https://api.hypixel.net/skyblock/auctions?page=" + pageId, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-                if (s.StatusCode != System.Net.HttpStatusCode.OK)
+                var intermediate = DateTime.Now;
+                if (s.StatusCode != System.Net.HttpStatusCode.OK || s.Headers.Date == httpClient.DefaultRequestHeaders.IfModifiedSince)
                 {
-                    // this is a very cheap request
-                    await Task.Delay(REQUEST_BACKOF_DELAY / 3);
-                    tryCount++;
+                    if (tryCount++ % 20 == 1)
+                        Console.Write(" - not changed post " + pageId);
+                    await Task.Delay(10);
                     continue;
                 }
                 if (s.StatusCode != System.Net.HttpStatusCode.OK)
+                {
+                    Console.WriteLine(s.StatusCode);
+                    Console.WriteLine(s.Content);
                     throw new HttpRequestException();
+                }
+
+                if (overallUpdateCancle.IsCancellationRequested)
+                {
+                    pageUpdate.Cancel();
+                    return (lastUpdate, 0);
+                }
                 //page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
 
                 var serializer = new Newtonsoft.Json.JsonSerializer();
-                using (StreamReader sr = new StreamReader(s.Content.ReadAsStream()))
-                using (var reader = new JsonTextReader(sr))
+                using (StreamReader sr = new StreamReader(await s.Content.ReadAsStreamAsync()))
+                using (JsonReader reader = new JsonTextReader(sr))
                 {
-                    for (int i = 0; i < 6; i++)
-                    {
-                        reader.Read();
-                    }
-                    lastPageCount = reader.ReadAsInt32() ?? 100;
-                    for (int i = 0; i < 4; i++)
+                    for (int i = 0; i < 11; i++)
                     {
                         reader.Read();
                     }
@@ -188,42 +195,60 @@ namespace Coflnet.Sky.Updater
                         await Task.Delay(REQUEST_BACKOF_DELAY * tryCount);
                         continue;
                     }
-                    reader.Read();
-                    if (count == 0)
+                    if (overallUpdateCancle.IsCancellationRequested)
                     {
-                        using var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("First")
-                            .WithTag("found", DateTime.Now.ToString())
-                            .AsChildOf(siteSpan.Span).StartActive();
+                        pageUpdate.Cancel();
+                        return (lastUpdate, 0);
                     }
-                    var minTime = lastUpdate - TimeSpan.FromSeconds(20);
+                    overallUpdateCancle.Cancel();
+                    reader.Read();
                     await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")))
                     {
-                        if (auction.Start < minTime)
+
+                        if (auction.Start < lastUpdate)
                             continue;
 
                         var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).Start();
-                        var a = Updater.ConvertAuction(auction, page.LastUpdated);
-                        a.Context["upage"] = pageId.ToString();
-                        a.Context["utry"] = tryCount.ToString();
-                        Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, a, prodSpan);
+                        FoundNew(pageId, p, page, tryCount, auction, prodSpan);
+                        if (count == 0)
+                        {
+                            var updatedAt = s.Headers.Where(h => h.Key.ToLower() == "date").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
+                            var tage = s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
+                            Console.WriteLine($"\nFound first new {auction.Uuid} {auction.Start} {pageId}\t tries:{tryCount}\t i: {iter}");
+                            Console.WriteLine($"now: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  {downloadStart.Second}.{downloadStart.Millisecond} \t\t{intermediate.Second}.{intermediate.Millisecond}\n{updatedAt} {tage}{(DateTime.Now - start)}");
+                        }
                         uuid = auction.Uuid;
 
                         count++;
                     }
+                    Console.WriteLine($"done: {DateTime.Now.Second}.{DateTime.Now.Millisecond.ToString("000")}");
                 }
                 LogHeaderName(siteSpan, s, "age");
                 LogHeaderName(siteSpan, s, "date");
                 LogHeaderName(siteSpan, s, "cf-ray");
                 int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
-                var lastModified = s.Headers.Where(h => h.Key.ToLower() == "last-modified").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
-                if (lastModified == null)
-                    lastModified = s.Headers.Where(h => h.Key.ToLower() == "date").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
-                LogHeaderName(siteSpan, s, "last-modified");
-                updated[pageId] = DateTimeOffset.Parse(lastModified);
 
-                Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} got: {response} took {tryCount} tries");
+                Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}");
             }
             return (page.LastUpdated, age);
+        }
+
+        protected virtual void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, OpenTracing.ISpan prodSpan)
+        {
+            var a = Updater.ConvertAuction(auction, page.LastUpdated);
+            a.Context["upage"] = pageId.ToString();
+            a.Context["utry"] = tryCount.ToString();
+            Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, a, prodSpan);
+        }
+
+        private static async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+        {
+            return await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
+        }
+
+        protected virtual RestClient GetClient()
+        {
+            return new RestClient(ApiBaseUrl);
         }
 
         private static void LogHeaderName(OpenTracing.IScope siteSpan, HttpResponseMessage s, string headerName)

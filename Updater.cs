@@ -24,7 +24,7 @@ namespace Coflnet.Sky.Updater
     {
         private const string LAST_UPDATE_KEY = "lastUpdate";
         private const int REQUEST_BACKOF_DELAY = 200;
-        private static int MillisecondsDelay = Int32.Parse(SimplerConfig.Config.Instance["SLOWDOWN_MS"]);
+        private static int MillisecondsDelay = Int32.Parse(SimplerConfig.Config.Instance["SLOWDOWN_MS"] ?? "0");
         private string apiKey;
         private HypixelApi apiClient;
         private bool abort;
@@ -167,7 +167,7 @@ namespace Coflnet.Sky.Updater
             Console.WriteLine("loading total pages " + max);
             var sumary = new AhStateSumary();
 
-            using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
+            using (var p = GetP())
             {
                 for (int loopIndexNotUse = 0; loopIndexNotUse <= max; loopIndexNotUse++)
                 {
@@ -182,7 +182,7 @@ namespace Coflnet.Sky.Updater
                             var page = index;
 
                             if (updaterIndex == 1)
-                                page = max - index -1;
+                                page = max - index - 1;
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
 
@@ -275,9 +275,9 @@ namespace Coflnet.Sky.Updater
             UpdateSize = sum;
 
             if (updaterIndex <= 1)
-                using (var p = new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build())
+                using (var p = GetSumaryProducer())
                 {
-                    Console.WriteLine($"delivering sumary, size: {MessagePack.MessagePackSerializer.Serialize(sumary).Length}  {sumary.ActiveAuctions.Count}" );
+                    Console.WriteLine($"delivering sumary, size: {MessagePack.MessagePackSerializer.Serialize(sumary).Length}  {sumary.ActiveAuctions.Count}");
                     sumary.Time = DateTime.Now;
                     var p1 = sumary.ActiveAuctions.Take(sumary.ActiveAuctions.Count / 2);
                     var p2 = sumary.ActiveAuctions.Skip(p1.Count());
@@ -297,6 +297,16 @@ namespace Coflnet.Sky.Updater
             OnNewUpdateEnd?.Invoke();
 
             return lastHypixelCache;
+        }
+
+        protected virtual IProducer<string, AhStateSumary> GetSumaryProducer()
+        {
+            return new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build();
+        }
+
+        protected virtual IProducer<string, SaveAuction> GetP()
+        {
+            return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build();
         }
 
         private static void ProduceSumary(AhStateSumary sumary, IProducer<string, AhStateSumary> p)

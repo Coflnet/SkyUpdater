@@ -22,7 +22,7 @@ namespace Coflnet.Sky.Updater
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
                 Updater.updaterIndex = 0;
             
-            if(Updater.updaterIndex < 2)
+            if(Updater.updaterIndex <= 2)
                 bazzar.UpdateForEver(null);
             updater.UpdateForEver();
             try
