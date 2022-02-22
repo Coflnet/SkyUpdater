@@ -169,7 +169,7 @@ namespace Coflnet.Sky.Updater
 
             using (var p = GetP())
             {
-                for (int loopIndexNotUse = 0; loopIndexNotUse <= max; loopIndexNotUse++)
+                for (int loopIndexNotUse = 0; loopIndexNotUse < max; loopIndexNotUse++)
                 {
                     var index = loopIndexNotUse;
                     await Task.Delay(MillisecondsDelay);
@@ -186,14 +186,12 @@ namespace Coflnet.Sky.Updater
                             if (updaterIndex == 2)
                                 page = (index + 40) % max;
 
-                            if (ShouldPageBeDropped(page))
-                                return;
                             AuctionPage res;
                             using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
                             {
                                 res = index != 0 ? await LoadPage(page, lastUpdate).ConfigureAwait(false) : firstPage;
                             }
-                            while (res == null || res.LastUpdated == updateStartTime)
+                            while (res == null)
                             {
                                 // tripple the backoff because these will be more
                                 await Task.Delay(REQUEST_BACKOF_DELAY * 3);
