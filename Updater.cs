@@ -313,7 +313,7 @@ namespace Coflnet.Sky.Updater
 
         private static void ProduceSumary(AhStateSumary sumary, IProducer<string, AhStateSumary> p)
         {
-            p.Produce(AuctionSumary, new Message<string, AhStateSumary> { Value = sumary, Key = "" }, r =>
+            p.Produce(AuctionSumary, new Message<string, AhStateSumary> { Value = sumary, Key = sumary.Time.ToString() + sumary.Part }, r =>
             {
                 if (r.Error.IsError || r.TopicPartitionOffset.Offset % 100 == 10)
                     Console.WriteLine(!r.Error.IsError ?
