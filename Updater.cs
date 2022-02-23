@@ -279,9 +279,8 @@ namespace Coflnet.Sky.Updater
                     sumary.Time = DateTime.Now;
                     var p1 = sumary.ActiveAuctions.Take(sumary.ActiveAuctions.Count / 2);
                     var p2 = sumary.ActiveAuctions.Skip(p1.Count());
-
-                    var s1 = new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p1), ItemCount = sumary.ItemCount, Time = sumary.Time };
-                    var s2 = new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p2), ItemCount = sumary.ItemCount, Time = sumary.Time };
+                    var s1 = CreateSumaryPart(sumary, p1, 0, 2);
+                    var s2 = CreateSumaryPart(sumary, p2, 1, 2);
                     Console.WriteLine("actual: " + MessagePack.MessagePackSerializer.Serialize(s1).Length);
                     Console.WriteLine("actual: " + MessagePack.MessagePackSerializer.Serialize(s2).Length);
                     ProduceSumary(s1, p);
@@ -295,6 +294,11 @@ namespace Coflnet.Sky.Updater
             OnNewUpdateEnd?.Invoke();
 
             return lastHypixelCache;
+        }
+
+        private static AhStateSumary CreateSumaryPart(AhStateSumary sumary, IEnumerable<KeyValuePair<long, long>> p1, int part, int partCount)
+        {
+            return new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p1), ItemCount = sumary.ItemCount, Time = sumary.Time, Part = part,PartCount =partCount };
         }
 
         protected virtual IProducer<string, AhStateSumary> GetSumaryProducer()
@@ -331,12 +335,12 @@ namespace Coflnet.Sky.Updater
             //Get the response and Deserialize
 
             var response = await client.ExecuteAsync(request).ConfigureAwait(false);
-            if(response.StatusCode == System.Net.HttpStatusCode.NotModified)
+            if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
             {
                 Console.Write(" not modified " + page);
                 return null;
             }
-            if(response.Content.Length == 0)
+            if (response.Content.Length == 0)
             {
                 Console.WriteLine(" | response empty " + page);
                 return null;
@@ -355,7 +359,7 @@ namespace Coflnet.Sky.Updater
 
         public static string FormatTime(DateTime time)
         {
-            return new DateTimeOffset(time.ToUniversalTime()).ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'",CultureInfo.InvariantCulture);
+            return new DateTimeOffset(time.ToUniversalTime()).ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'", CultureInfo.InvariantCulture);
         }
 
         /// <summary>
