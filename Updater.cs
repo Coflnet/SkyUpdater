@@ -279,8 +279,8 @@ namespace Coflnet.Sky.Updater
                     sumary.Time = DateTime.Now;
                     var p1 = sumary.ActiveAuctions.Take(sumary.ActiveAuctions.Count / 2);
                     var p2 = sumary.ActiveAuctions.Skip(p1.Count());
-                    var s1 = CreateSumaryPart(sumary, p1, 0, 2);
-                    var s2 = CreateSumaryPart(sumary, p2, 1, 2);
+                    var s1 = CreateSumaryPart(sumary, p1, 1, 2);
+                    var s2 = CreateSumaryPart(sumary, p2, 2, 2);
                     Console.WriteLine("actual: " + MessagePack.MessagePackSerializer.Serialize(s1).Length);
                     Console.WriteLine("actual: " + MessagePack.MessagePackSerializer.Serialize(s2).Length);
                     ProduceSumary(s1, p);
