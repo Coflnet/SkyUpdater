@@ -62,7 +62,6 @@ namespace Coflnet.Sky.Updater
                         await Task.Delay(30000);
                     }
 
-
                 }, stoppingToken, "sky-updater", 50);
         }
 
