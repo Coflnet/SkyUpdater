@@ -11,7 +11,7 @@ using Coflnet;
 using Coflnet.Sky.Updater.Models;
 using Confluent.Kafka;
 using dev;
-using hypixel;
+using Coflnet.Sky.Core;
 using Hypixel.NET;
 using OpenTracing;
 using OpenTracing.Propagation;
@@ -653,7 +653,7 @@ namespace Coflnet.Sky.Updater
         private static void ProduceIntoTopic(
             IEnumerable<SaveAuction> auctionsToAdd,
             string targetTopic,
-            Confluent.Kafka.IProducer<string, hypixel.SaveAuction> p,
+            Confluent.Kafka.IProducer<string, SaveAuction> p,
             ISpanContext pageSpanContext = null)
         {
             var tracer = OpenTracing.Util.GlobalTracer.Instance;

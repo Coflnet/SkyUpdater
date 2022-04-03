@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Coflnet.Sky.Core;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -17,10 +18,10 @@ namespace Coflnet.Sky.Updater
         {
             var bazzar = new BazaarUpdater();
             var updater = new Updater(null);
-            var loading = hypixel.ItemDetails.Instance.LoadFromDB();
+            var loading = ItemDetails.Instance.LoadFromDB();
 
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
-                Updater.updaterIndex = 0;
+                Updater.updaterIndex = 2;
             
             if(Updater.updaterIndex <= 2)
                 bazzar.UpdateForEver(null);

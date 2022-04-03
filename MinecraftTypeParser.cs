@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Coflnet.Sky.Core;
 using Coflnet.Sky.Updater.Models;
 using MessagePack;
 using Newtonsoft.Json;
@@ -143,7 +144,7 @@ namespace Coflnet.Sky.Updater
 
         static string RemoveReforgesAndEnchanted(string input)
         {
-            var fullName = hypixel.ItemReferences.RemoveReforgesAndLevel(input);
+            var fullName = ItemReferences.RemoveReforgesAndLevel(input);
 
             if(fullName.StartsWith("Enchanted"))
             {

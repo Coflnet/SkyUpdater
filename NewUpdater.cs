@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Coflnet.Sky.Updater.Models;
 using Confluent.Kafka;
-using hypixel;
+using Coflnet.Sky.Core;
 using Newtonsoft.Json;
 using RestSharp;
 

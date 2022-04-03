@@ -2,7 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using hypixel;
+using Coflnet.Sky.Core;
 using Hypixel.NET;
 using Hypixel.NET.SkyblockApi;
 using Newtonsoft.Json;

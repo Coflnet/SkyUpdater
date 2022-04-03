@@ -6,9 +6,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Coflnet.Sky.Updater.Models;
 using dev;
-using hypixel;
+using Coflnet.Sky.Core;
 using Newtonsoft.Json;
-using static hypixel.ItemDetails;
+using static Coflnet.Sky.Core.ItemDetails;
 
 namespace Coflnet.Sky.Updater
 {
