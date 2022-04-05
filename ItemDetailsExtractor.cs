@@ -26,9 +26,9 @@ namespace Coflnet.Sky.Updater
                 {
                     ToFillDetails.TryAdd(item.Tag, item);
                 }
-
             }
         }
+        
         public void AddOrIgnoreDetails(Auction a)
         {
             var id = NBT.ItemID(a.ItemBytes);
