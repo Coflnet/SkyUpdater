@@ -156,6 +156,7 @@ namespace Coflnet.Sky.Updater
                 // wait for the server cache to refresh
                 await Task.Delay(REQUEST_BACKOF_DELAY);
                 firstPage = await LoadPage(page, lastUpdate).ConfigureAwait(false);
+                LastPullComplete = DateTime.Now;
             }
             OnNewUpdateStart?.Invoke();
 
@@ -210,7 +211,6 @@ namespace Coflnet.Sky.Updater
                             {
                                 lastHypixelCache = res.LastUpdated;
                                 LastPull = res.LastUpdated;
-                                LastPullComplete = DateTime.Now;
                                 // correct update time
                                 Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
                             }
@@ -300,7 +300,7 @@ namespace Coflnet.Sky.Updater
 
         private static AhStateSumary CreateSumaryPart(AhStateSumary sumary, IEnumerable<KeyValuePair<long, long>> p1, int part, int partCount)
         {
-            return new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p1), ItemCount = sumary.ItemCount, Time = sumary.Time, Part = part,PartCount =partCount };
+            return new AhStateSumary() { ActiveAuctions = new ConcurrentDictionary<long, long>(p1), ItemCount = sumary.ItemCount, Time = sumary.Time, Part = part, PartCount = partCount };
         }
 
         protected virtual IProducer<string, AhStateSumary> GetSumaryProducer()
