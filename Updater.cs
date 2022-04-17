@@ -64,6 +64,7 @@ namespace Coflnet.Sky.Updater
         public event Action OnNewUpdateEnd;
 
         public static DateTime LastPull { get; internal set; }
+        public static DateTime LastPullComplete { get; internal set; }
         public static int UpdateSize { get; internal set; }
 
         Prometheus.Counter newAuctions = Prometheus.Metrics.CreateCounter("new_auction", "Increases every time a new auction is found");
@@ -209,6 +210,7 @@ namespace Coflnet.Sky.Updater
                             {
                                 lastHypixelCache = res.LastUpdated;
                                 LastPull = res.LastUpdated;
+                                LastPullComplete = DateTime.Now;
                                 // correct update time
                                 Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
                             }

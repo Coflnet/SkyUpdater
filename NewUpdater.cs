@@ -98,7 +98,7 @@ namespace Coflnet.Sky.Updater
         protected virtual async Task<DateTime> DoOneUpdate(DateTime lastUpdate, IProducer<string, SaveAuction> p, int page, OpenTracing.IScope siteSpan)
         {
             var pageToken = new CancellationTokenSource(20000);
-            var result = await GetAndSavePage(page,p,lastUpdate,siteSpan,pageToken,0);
+            var result = await GetAndSavePage(page, p, lastUpdate, siteSpan, pageToken, 0);
             return result.Item1;
         }
 
@@ -215,6 +215,9 @@ namespace Coflnet.Sky.Updater
                             var updatedAt = s.Headers.Where(h => h.Key.ToLower() == "date").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
                             var tage = s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
                             Console.WriteLine($"\nFound first new {auction.Uuid} {auction.Start} {pageId}\t tries:{tryCount}\t i: {iter}");
+
+                            // last "auction found" start
+                            Updater.LastPullComplete = intermediate;
                             Console.WriteLine($"now: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  {downloadStart.Second}.{downloadStart.Millisecond} \t\t{intermediate.Second}.{intermediate.Millisecond}\n{updatedAt} {tage}{(DateTime.Now - start)}");
                         }
                         uuid = auction.Uuid;

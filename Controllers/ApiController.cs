@@ -24,7 +24,7 @@ namespace SkyUpdater.Controllers
         [HttpGet]
         public DateTime LastUpdate()
         {
-            return Updater.LastPull;
+            return Updater.LastPullComplete;
         }
     }
 }
