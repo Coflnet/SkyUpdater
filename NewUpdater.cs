@@ -218,6 +218,7 @@ namespace Coflnet.Sky.Updater
 
                             // last "auction found" start
                             Updater.LastPullComplete = intermediate;
+                            Updater.LastPull = (page._lastUpdated / 1000).ThisIsNowATimeStamp();
                             Console.WriteLine($"now: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  {downloadStart.Second}.{downloadStart.Millisecond} \t\t{intermediate.Second}.{intermediate.Millisecond}\n{updatedAt} {tage}{(DateTime.Now - start)}");
                         }
                         uuid = auction.Uuid;
