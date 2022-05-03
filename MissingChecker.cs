@@ -36,7 +36,7 @@ namespace Coflnet.Sky.Updater
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var keys = config["API_KEY"]?.Split(",");
-            if(keys == null || keys.Length <= Updater.updaterIndex)
+            if (keys == null || keys.Length <= Updater.updaterIndex)
                 return; // no key for this instance
             apiKey = keys[Updater.updaterIndex];
             await Kafka.KafkaConsumer.ConsumeBatch<SaveAuction>(
@@ -47,8 +47,8 @@ namespace Coflnet.Sky.Updater
                     try
                     {
                         // prefilter
-                        var toCheck = auctions.Where(a=>a.End > DateTime.UtcNow - TimeSpan.FromHours(1)).ToList();
-                        if(toCheck.Count == 0)
+                        var toCheck = auctions.Where(a => a.End > DateTime.UtcNow - TimeSpan.FromHours(1)).ToList();
+                        if (toCheck.Count == 0)
                         {
                             Console.WriteLine($"skipped batch because to old {auctions.FirstOrDefault()?.Uuid} " + auctions.FirstOrDefault()?.End);
                             return;
@@ -61,7 +61,6 @@ namespace Coflnet.Sky.Updater
                         dev.Logger.Instance.Error(e, "checking missing");
                         await Task.Delay(30000);
                     }
-
                 }, stoppingToken, "sky-updater", 50);
         }
 
@@ -82,23 +81,23 @@ namespace Coflnet.Sky.Updater
 
                         //Get the response and Deserialize
                         var response = await client.ExecuteAsync(request).ConfigureAwait(false);
-                        if(response.StatusCode != System.Net.HttpStatusCode.OK)
+                        if (response.StatusCode != System.Net.HttpStatusCode.OK)
                             return;
                         var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
                         foreach (var auction in responseDeserialized.Auctions)
                         {
-                            var target = auctions.Where(a=>a.Uuid == auction.Uuid).FirstOrDefault();
+                            var target = auctions.Where(a => a.Uuid == auction.Uuid).FirstOrDefault();
                             var item = Updater.ConvertAuction(auction);
                             if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(2))
                                 Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, item, null);
-                            else if(target?.HighestBidAmount > auction.HighestBidAmount)
+                            else if (target?.HighestBidAmount > auction.HighestBidAmount)
                             {
                                 Updater.ProduceIntoTopic(Updater.NewBidsTopic, p, item, null);
                                 Console.WriteLine($"found new bid {item.Uuid} {auction.HighestBidAmount} {auction.Bids.FirstOrDefault().Timestamp}");
                             }
-                            else 
+                            else
                                 Updater.ProduceIntoTopic(Updater.AuctionEndedTopic, p, item, null);
-                            
+
                         }
                     }
                     catch (Exception e)
