@@ -20,6 +20,9 @@ using RestSharp;
 
 namespace Coflnet.Sky.Updater
 {
+    /// <summary>
+    /// Main implementation for downloading, parsing and forwarding auctions
+    /// </summary>
     public class Updater
     {
         private const string LAST_UPDATE_KEY = "lastUpdate";
