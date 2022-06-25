@@ -17,7 +17,7 @@ namespace Coflnet.Sky.Updater
 {
     public class NewUpdater
     {
-        private const int REQUEST_BACKOF_DELAY = 180;
+        private const int REQUEST_BACKOF_DELAY = 130;
         protected virtual string ApiBaseUrl => "https://api.hypixel.net";
         private static ProducerConfig producerConfig = new ProducerConfig
         {
@@ -30,8 +30,6 @@ namespace Coflnet.Sky.Updater
         public async Task DoUpdates(int index, CancellationToken token)
         {
             var lastUpdate = DateTime.Now - TimeSpan.FromMinutes(2);
-            // saving offsets
-            var ageLookup = new Dictionary<int, int>();
             while (!token.IsCancellationRequested)
             {
                 try
