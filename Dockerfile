@@ -13,13 +13,10 @@ FROM mcr.microsoft.com/dotnet/aspnet:6.0
 WORKDIR /app
 
 COPY --from=build /build/SkyCommand/bin/release/net6.0/publish/ .
-RUN mkdir /data
 ENV ASPNETCORE_URLS=http://+:8000
 
 RUN useradd --uid $(shuf -i 2000-65000 -n 1) app
 USER app
 
 ENTRYPOINT ["dotnet", "SkyUpdater.dll", "--hostBuilder:reloadConfigOnChange=false"]
-
-VOLUME /data
 
