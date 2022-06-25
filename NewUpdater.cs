@@ -17,7 +17,7 @@ namespace Coflnet.Sky.Updater
 {
     public class NewUpdater
     {
-        private const int REQUEST_BACKOF_DELAY = 130;
+        private const int REQUEST_BACKOF_DELAY = 60;
         protected virtual string ApiBaseUrl => "https://api.hypixel.net";
         private static ProducerConfig producerConfig = new ProducerConfig
         {
