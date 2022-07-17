@@ -172,7 +172,7 @@ namespace Coflnet.Sky.Updater
                 //page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
 
                 var serializer = new Newtonsoft.Json.JsonSerializer();
-                using (StreamReader sr = new StreamReader(await s.Content.ReadAsStreamAsync()))
+                using (StreamReader sr = new StreamReader(await s.Content.ReadAsStreamAsync().ConfigureAwait(false)))
                 using (JsonReader reader = new JsonTextReader(sr))
                 {
                     for (int i = 0; i < 11; i++)

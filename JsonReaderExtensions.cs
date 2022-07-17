@@ -10,7 +10,7 @@ namespace Coflnet.Sky.Updater
             this JsonReader jsonReader, Regex regex)
         {
             JsonSerializer serializer = new JsonSerializer();
-            while (await jsonReader.ReadAsync())
+            while (await jsonReader.ReadAsync().ConfigureAwait(false))
             {
                 if (regex.IsMatch(jsonReader.Path)
                     && jsonReader.TokenType != JsonToken.PropertyName)
