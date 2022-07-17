@@ -163,7 +163,7 @@ namespace Coflnet.Sky.Updater
             }
             OnNewUpdateStart?.Invoke();
 
-            var binupdate = Task.Run(() => BinUpdater.GrabAuctions(apiClient)).ConfigureAwait(false);
+            var binupdate = BinUpdater.GrabAuctions(apiClient).ConfigureAwait(false);
 
             var cancelToken = new CancellationToken();
             AuctionCount = new ConcurrentDictionary<string, int>();

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Coflnet.Sky.Core;
 using Hypixel.NET;
 using Hypixel.NET.SkyblockApi;
@@ -43,23 +44,23 @@ namespace Coflnet.Sky.Updater
 
         private DateTime historyLimit;
 
-        public static void GrabAuctions(HypixelApi hypixelApi)
+        public static async Task GrabAuctions(HypixelApi hypixelApi)
         {
             using var span = GlobalTracer.Instance.BuildSpan("SoldAuctions").StartActive();
-            List<SaveAuction> auctions = DownloadSells("https://api.hypixel.net");
+            List<SaveAuction> auctions = await DownloadSells("https://api.hypixel.net");
             Updater.AddSoldAuctions(auctions, span);
 
             SoldLastMin = auctions;
 
         }
 
-        public static List<SaveAuction> DownloadSells(string BaseUrl)
+        public static async Task<List<SaveAuction>> DownloadSells(string BaseUrl)
         {
             var client = new RestClient(BaseUrl);
             var request = new RestRequest($"skyblock/auctions_ended", Method.GET);
 
             //Get the response and Deserialize
-            var response = client.Execute(request);
+            var response = await client.ExecuteAsync(request).ConfigureAwait(false);
             var expired = JsonConvert.DeserializeObject<AuctionsEnded>(response.Content);
             var auctions = expired.Auctions.Select(item =>
             {

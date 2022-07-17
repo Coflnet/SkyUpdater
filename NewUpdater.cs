@@ -78,8 +78,8 @@ namespace Coflnet.Sky.Updater
                    */
 
                     Updater.lastUpdateDone = lastUpdate;
-                    await Task.Delay(500);
-                    var binupdate = await Task.Run(() => BinUpdater.DownloadSells(ApiBaseUrl)).ConfigureAwait(false);
+                    await Task.Delay(800);
+                    var binupdate = await BinUpdater.DownloadSells(ApiBaseUrl).ConfigureAwait(false);
                     ProduceSells(binupdate);
                     var tookTime = lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now;
                     Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(60)} " + tookTime);
