@@ -20,6 +20,7 @@ namespace Coflnet.Sky.Updater
     {
         private IConfiguration config;
         private string apiKey;
+        static RestClient skyblockClient = new RestClient("https://api.hypixel.net/skyblock/");
 
 
         private static ProducerConfig producerConfig = new ProducerConfig
@@ -68,43 +69,20 @@ namespace Coflnet.Sky.Updater
         {
             Console.WriteLine("got a batch" + auctions.Count());
             var ids = auctions.GroupBy(a => a.AuctioneerId).Select(a => a.First().AuctioneerId).ToList();
-            var client = new RestClient("https://api.hypixel.net/skyblock/");
 
             var start = DateTime.Now;
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build())
             {
-                await Task.WhenAll(ids.Select(async id =>
+                await Task.WhenAll(ids.Select(async playerId =>
                 {
                     try
                     {
-                        var request = new RestRequest($"auction?key={apiKey}&player={id}", Method.GET);
-
-                        //Get the response and Deserialize
-                        var response = await client.ExecuteAsync(request).ConfigureAwait(false);
-                        if (response.StatusCode != System.Net.HttpStatusCode.OK)
-                            return;
-                        var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
-                        foreach (var auction in responseDeserialized.Auctions)
-                        {
-                            var target = auctions.Where(a => a.Uuid == auction.Uuid).FirstOrDefault();
-                            var item = Updater.ConvertAuction(auction);
-                            if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(2))
-                                Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, item, null);
-                            else if (target?.HighestBidAmount > auction.HighestBidAmount)
-                            {
-                                Updater.ProduceIntoTopic(Updater.NewBidsTopic, p, item, null);
-                                Console.WriteLine($"found new bid {item.Uuid} {auction.HighestBidAmount} {auction.Bids.FirstOrDefault().Timestamp}");
-                            }
-                            else
-                                Updater.ProduceIntoTopic(Updater.AuctionEndedTopic, p, item, null);
-
-                        }
+                        await UpdatePlayerAuctions(playerId, p, apiKey).ConfigureAwait(false);
                     }
                     catch (Exception e)
                     {
-                        dev.Logger.Instance.Error(e, "getting player auctions " + id);
+                        dev.Logger.Instance.Error(e, "getting player auctions " + playerId);
                     }
-
                 }));
 
                 // wait for up to 10 seconds for any inflight messages to be delivered.
@@ -115,6 +93,26 @@ namespace Coflnet.Sky.Updater
             if (delay < TimeSpan.Zero)
                 return;
             await Task.Delay(delay);
+        }
+
+        public static async Task UpdatePlayerAuctions(string playerId, IProducer<string, SaveAuction> p, string apiKey)
+        {
+            var request = new RestRequest($"auction?key={apiKey}&player={playerId}", Method.GET);
+
+            //Get the response and Deserialize
+            var response = await skyblockClient.ExecuteAsync(request).ConfigureAwait(false);
+            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+                return;
+            var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
+            foreach (var auction in responseDeserialized.Auctions)
+            {
+                var item = Updater.ConvertAuction(auction);
+                Console.WriteLine("found auction " + item.Uuid);
+                if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(2))
+                    Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, item, null);
+                else if (item.End < DateTime.UtcNow && item.End > DateTime.UtcNow - TimeSpan.FromMinutes(200) && item.HighestBidAmount > 0)
+                    Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, p, item, null);
+            }
         }
 
         public class AuctionsByPlayer

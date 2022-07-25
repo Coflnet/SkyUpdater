@@ -36,7 +36,7 @@ namespace Coflnet.Sky.Updater
         private ItemDetailsExtractor extractor = new ItemDetailsExtractor();
 
         private static string MissingAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:MISSING_AUCTION"];
-        private static string SoldAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:SOLD_AUCTION"];
+        public static string SoldAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:SOLD_AUCTION"];
         public static readonly string NewAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_AUCTION"];
         public static string AuctionEndedTopic = SimplerConfig.Config.Instance["TOPICS:AUCTION_ENDED"];
         public static string NewBidsTopic = SimplerConfig.Config.Instance["TOPICS:NEW_BID"];
