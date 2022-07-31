@@ -25,7 +25,7 @@ namespace Coflnet.Sky.Updater.Tests
             var update = new TestUpdater();
 
             var host = Program.CreateHostBuilder(new string[]{"--urls=http://localhost:6001/"}).Build();
-            var cancleToken = new CancellationTokenSource(1000).Token;
+            var cancleToken = new CancellationTokenSource(8000).Token;
             _ = host.RunAsync(cancleToken);
             await Task.Delay(200);
             // warmup
