@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Coflnet.Sky.Updater;
+using Coflnet.Sky.Updater.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -27,6 +28,15 @@ namespace SkyUpdater.Controllers
             if (Updater.LastPullComplete < DateTime.Now - TimeSpan.FromMinutes(2))
                 return default(DateTime);
             return Updater.LastPull + TimeSpan.FromSeconds(10);
+        }
+
+        [Route("/skyblock/auctions")]
+        [HttpGet]
+        [HttpPost]
+        [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any)]
+        public string MockAuctions()
+        {
+            return System.IO.File.ReadAllText("Mock/auctions.json");
         }
     }
 }

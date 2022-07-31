@@ -207,7 +207,7 @@ namespace Coflnet.Sky.Updater
                         if (auction.Start < lastUpdate)
                             continue;
 
-                        var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan.Span).Start();
+                        var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan?.Span).Start();
                         FoundNew(pageId, p, page, tryCount, auction, prodSpan);
                         if (count == 0)
                         {
@@ -244,7 +244,7 @@ namespace Coflnet.Sky.Updater
             Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, a, prodSpan);
         }
 
-        private static async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+        protected virtual async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
         {
             return await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
         }
@@ -256,7 +256,7 @@ namespace Coflnet.Sky.Updater
 
         private static void LogHeaderName(OpenTracing.IScope siteSpan, HttpResponseMessage s, string headerName)
         {
-            siteSpan.Span.Log($"{headerName}: " + s.Headers.Where(h => h.Key.ToLower() == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault());
+            siteSpan?.Span?.Log($"{headerName}: " + s.Headers.Where(h => h.Key.ToLower() == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault());
         }
     }
 }

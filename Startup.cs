@@ -30,6 +30,8 @@ namespace Coflnet.Sky.Updater
             });
             services.AddJaeger(0.5);
             services.AddHostedService<MissingChecker>();
+            services.AddResponseCaching();
+            services.AddMemoryCache();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -47,8 +49,7 @@ namespace Coflnet.Sky.Updater
             });
 
             app.UseRouting();
-
-            app.UseAuthorization();
+            app.UseResponseCaching();
 
             app.UseEndpoints(endpoints =>
             {
