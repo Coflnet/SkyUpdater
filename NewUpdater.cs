@@ -201,12 +201,13 @@ namespace Coflnet.Sky.Updater
                     }
                     overallUpdateCancle.Cancel();
                     reader.Read();
+                    int tracker = 0;
                     await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")))
                     {
-
+                        if (tracker++ % 50 == 0)
+                            Console.WriteLine(DateTime.Now.Millisecond);
                         if (auction.Start < lastUpdate)
                             continue;
-
                         var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan?.Span).Start();
                         FoundNew(pageId, p, page, tryCount, auction, prodSpan);
                         if (count == 0)
@@ -218,7 +219,7 @@ namespace Coflnet.Sky.Updater
                             // last "auction found" start
                             Updater.LastPullComplete = intermediate;
                             Updater.LastPull = (page._lastUpdated / 1000).ThisIsNowATimeStamp();
-                            Console.WriteLine($"now: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  {downloadStart.Second}.{downloadStart.Millisecond} \t\t{intermediate.Second}.{intermediate.Millisecond}\n{updatedAt} {tage}{(DateTime.Now - start)}");
+                            Console.WriteLine($"dls:{downloadStart.Second}.{downloadStart.Millisecond} \tparse:{intermediate.Second}.{intermediate.Millisecond} \tnow: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  \n{updatedAt} {tage}{(DateTime.Now - start)}");
                         }
                         uuid = auction.Uuid;
 
@@ -249,9 +250,13 @@ namespace Coflnet.Sky.Updater
             return await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
         }
 
+
+        private RestClient _restClient;
         protected virtual RestClient GetClient()
         {
-            return new RestClient(ApiBaseUrl);
+            if (_restClient == null)
+                _restClient = new RestClient(ApiBaseUrl);
+            return _restClient;
         }
 
         private static void LogHeaderName(OpenTracing.IScope siteSpan, HttpResponseMessage s, string headerName)

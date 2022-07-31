@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Coflnet.Sky.Updater.Models;
 using Newtonsoft.Json;
 
 namespace Coflnet.Sky.Updater
@@ -12,8 +13,8 @@ namespace Coflnet.Sky.Updater
             JsonSerializer serializer = new JsonSerializer();
             while (await jsonReader.ReadAsync().ConfigureAwait(false))
             {
-                if (regex.IsMatch(jsonReader.Path)
-                    && jsonReader.TokenType != JsonToken.PropertyName)
+                if (jsonReader.TokenType != JsonToken.PropertyName && regex.IsMatch(jsonReader.Path)
+                    )
                 {
                     yield return serializer.Deserialize<T>(jsonReader);
                 }
