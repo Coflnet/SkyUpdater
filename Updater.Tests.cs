@@ -19,7 +19,7 @@ namespace Coflnet.Sky.Updater.Tests
         }
 
 
-        [Test]
+        //[Test]
         public async Task Parse()
         {
             var update = new TestUpdater();
