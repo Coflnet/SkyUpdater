@@ -488,8 +488,6 @@ namespace Coflnet.Sky.Updater
                 Console.Write($"\r Loading: ({i}/{max}) Done With: {doneCont} Total:{sum} {timeEst:mm\\:ss}");
         }
 
-        // builds the index for all auctions in the last hour
-
         async Task<int> Save(AuctionPage res, DateTime lastUpdate, AhStateSumary sumary, IProducer<string, SaveAuction> p, ISpanContext pageSpanContext)
         {
             List<SaveAuction> processed = new List<SaveAuction>();
