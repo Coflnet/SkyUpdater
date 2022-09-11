@@ -26,7 +26,7 @@ namespace Coflnet.Sky.Updater
         private static ProducerConfig producerConfig = new ProducerConfig
         {
             BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 100,
+            LingerMs = 80,
         };
 
         public MissingChecker(IConfiguration config)
