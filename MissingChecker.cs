@@ -97,7 +97,7 @@ namespace Coflnet.Sky.Updater
 
         public static async Task UpdatePlayerAuctions(string playerId, IProducer<string, SaveAuction> p, string apiKey)
         {
-            var request = new RestRequest($"auction?key={apiKey}&player={playerId}", Method.GET);
+            var request = new RestRequest($"auction?key={apiKey}&player={playerId}", Method.Get);
 
             //Get the response and Deserialize
             var response = await skyblockClient.ExecuteAsync(request).ConfigureAwait(false);

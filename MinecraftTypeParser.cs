@@ -82,7 +82,7 @@ namespace Coflnet.Sky.Updater
         static void DownloadItems()
         {
             var client = new RestClient("https://minecraft-ids.grahamedgecombe.com/");
-            var request = new RestRequest($"items.json", Method.GET);
+            var request = new RestRequest($"items.json", Method.Get);
 
             //Get the response and Deserialize
             var response = client.Execute(request);

@@ -201,7 +201,7 @@ namespace Coflnet.Sky.Updater
                     overallUpdateCancle.Cancel();
                     reader.Read();
                     int tracker = 0;
-                    await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")))
+                    await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")).ConfigureAwait(false))
                     {
                         if (tracker++ % 50 == 0)
                             Console.WriteLine(DateTime.Now.Millisecond);

@@ -335,7 +335,7 @@ namespace Coflnet.Sky.Updater
         private static async Task<AuctionPage> LoadPage(int page, DateTime latUpdate)
         {
             var client = new RestClient("https://api.hypixel.net/skyblock");
-            var request = new RestRequest($"auctions?page={page}", Method.GET);
+            var request = new RestRequest($"auctions?page={page}", Method.Get);
             request.AddHeader("If-Modified-Since", FormatTime(latUpdate));
             //Get the response and Deserialize
 
