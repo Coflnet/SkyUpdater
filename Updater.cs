@@ -7,7 +7,6 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Coflnet;
 using Coflnet.Sky.Updater.Models;
 using Confluent.Kafka;
 using dev;
@@ -32,6 +31,7 @@ namespace Coflnet.Sky.Updater
         private HypixelApi apiClient;
         private bool abort;
         private static bool minimumOutput;
+        ItemSkinHandler skinHandler;
 
         private ItemDetailsExtractor extractor = new ItemDetailsExtractor();
 
@@ -83,13 +83,14 @@ namespace Coflnet.Sky.Updater
         /// </summary>
         TaskFactory taskFactory;
 
-        public Updater(string apiKey)
+        public Updater(string apiKey, ItemSkinHandler skinHandler)
         {
             this.apiKey = apiKey;
             this.apiClient = new Hypixel.NET.HypixelApi(apiKey, 1);
 
             var scheduler = new LimitedConcurrencyLevelTaskScheduler(2);
             taskFactory = new TaskFactory(scheduler);
+            this.skinHandler = skinHandler;
         }
 
         /// <summary>
@@ -502,6 +503,7 @@ namespace Coflnet.Sky.Updater
                     .Select(a =>
                     {
                         var auction = ConvertAuction(a, res.LastUpdated);
+                        skinHandler.StoreIfNeeded(auction, a);
                         if (auction.Start > lastUpdate)
                             ProduceIntoTopic(new SaveAuction[] { auction }, NewAuctionsTopic, p, pageSpanContext);
                         return auction;

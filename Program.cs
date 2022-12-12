@@ -16,26 +16,6 @@ namespace Coflnet.Sky.Updater
         //static string apiKey = SimplerConfig.Config.Instance["apiKey"];
         public static void Main(string[] args)
         {
-            var bazzar = new BazaarUpdater();
-            var updater = new Updater(null);
-            var loading = ItemDetails.Instance.LoadFromDB();
-
-            if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
-                Updater.updaterIndex = 0;
-            
-            if(Updater.updaterIndex % 2 == 0)
-                bazzar.UpdateForEver(null);
-            updater.UpdateForEver();
-            try
-            {
-                loading.Wait();
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|");
-                Console.WriteLine($"Failed to load items {e.Message}\n {e.StackTrace}");
-            }
-
             CreateHostBuilder(args).Build().Run();
         }
 

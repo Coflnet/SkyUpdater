@@ -30,6 +30,10 @@ namespace Coflnet.Sky.Updater
             });
             services.AddJaeger(0.5);
             services.AddHostedService<MissingChecker>();
+            services.AddSingleton<ItemSkinHandler>();
+            services.AddHostedService<ItemSkinHandler>(di => di.GetService<ItemSkinHandler>());
+            services.AddHostedService<UpdaterManager>();
+            services.AddSingleton<Items.Client.Api.IItemsApi, Items.Client.Api.ItemsApi>(sp => new Items.Client.Api.ItemsApi(SimplerConfig.Config.Instance["SKY_ITEMS_URL"]));
             services.AddResponseCaching();
             services.AddMemoryCache();
         }
