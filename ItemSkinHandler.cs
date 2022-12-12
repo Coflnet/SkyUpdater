@@ -53,12 +53,15 @@ public class ItemSkinHandler : BackgroundService
             try
             {
                 skinNames[tag] = true;
-                await itemsApi.ItemItemTagTexturePostAsync(tag, tag, NBT.SkullUrl(auction.ItemBytes));
+                var skullUrl = NBT.SkullUrl(auction.ItemBytes);
+                if (skullUrl == null)
+                    return;
+                await itemsApi.ItemItemTagTexturePostAsync(tag, tag, skullUrl);
                 Console.WriteLine($"updated skin for {tag}");
             }
             catch (Exception e)
             {
-                dev.Logger.Instance.Error(e, "updating skin");
+                dev.Logger.Instance.Error(e, "loading skin for " + tag);
             }
         });
     }

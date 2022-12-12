@@ -16,7 +16,6 @@ namespace Coflnet.Sky.Updater
             Configuration = configuration;
         }
 
-        private static string AuctionEndedTopic = SimplerConfig.Config.Instance["TOPICS:AUCTION_ENDED"];
         public IConfiguration Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
@@ -33,7 +32,7 @@ namespace Coflnet.Sky.Updater
             services.AddSingleton<ItemSkinHandler>();
             services.AddHostedService<ItemSkinHandler>(di => di.GetService<ItemSkinHandler>());
             services.AddHostedService<UpdaterManager>();
-            services.AddSingleton<Items.Client.Api.IItemsApi, Items.Client.Api.ItemsApi>(sp => new Items.Client.Api.ItemsApi(SimplerConfig.Config.Instance["SKY_ITEMS_URL"]));
+            services.AddSingleton<Items.Client.Api.IItemsApi, Items.Client.Api.ItemsApi>(sp => new Items.Client.Api.ItemsApi(Configuration["ITEMS_BASE_URL"]));
             services.AddResponseCaching();
             services.AddMemoryCache();
         }
