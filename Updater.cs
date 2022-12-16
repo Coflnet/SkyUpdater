@@ -44,13 +44,13 @@ namespace Coflnet.Sky.Updater
         private static int DropOffset = Int32.Parse(SimplerConfig.Config.Instance["DROP_OFFSET"] ?? "0");
 
         private static bool doFullUpdate = false;
-        Prometheus.Counter auctionUpdateCount = Prometheus.Metrics.CreateCounter("auction_update", "How many auctions were updated");
+        Prometheus.Counter auctionUpdateCount = Prometheus.Metrics.CreateCounter("sky_updater_auction_update", "How many auctions were updated");
 
         static Prometheus.HistogramConfiguration buckets = new Prometheus.HistogramConfiguration()
         {
             Buckets = Prometheus.Histogram.LinearBuckets(start: 9, width: 2, count: 10)
         };
-        static Prometheus.Histogram sendingTime = Prometheus.Metrics.CreateHistogram("timeToSending", "The time from api Update to sending. (should be close to 10)",
+        static Prometheus.Histogram sendingTime = Prometheus.Metrics.CreateHistogram("sky_updater_time_to_send", "The time from api Update to sending. (should be close to 10)",
             buckets);
         static Prometheus.Histogram timeToFind = Prometheus.Metrics.CreateHistogram("sky_updater_time_to_find", "The time from api Update till deserialising. (should be close to 10)",
             buckets);
@@ -70,7 +70,7 @@ namespace Coflnet.Sky.Updater
         public static DateTime LastPullComplete { get; internal set; }
         public static int UpdateSize { get; internal set; }
 
-        Prometheus.Counter newAuctions = Prometheus.Metrics.CreateCounter("new_auction", "Increases every time a new auction is found");
+        Prometheus.Counter newAuctions = Prometheus.Metrics.CreateCounter("sky_updater_new_auctions", "Increases every time a new auction is found");
 
         private static ConcurrentDictionary<string, bool> ActiveAuctions = new ConcurrentDictionary<string, bool>();
         private static ConcurrentDictionary<string, DateTime> MissingSince = new ConcurrentDictionary<string, DateTime>();

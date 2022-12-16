@@ -47,12 +47,11 @@ public class ItemSkinHandler : BackgroundService
             return;
         if (!skinNames.TryGetValue(tag, out var saved) && !saved)
             return;
-        Console.WriteLine($"found skin for {tag}");
+        skinNames[tag] = true;
         Task.Run(async () =>
         {
             try
             {
-                skinNames[tag] = true;
                 var skullUrl = NBT.SkullUrl(auction.ItemBytes);
                 if (skullUrl == null)
                     return;
