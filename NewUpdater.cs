@@ -110,7 +110,6 @@ namespace Coflnet.Sky.Updater
             return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build();
         }
 
-
         protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0)
         {
             await Task.Delay(iter * 200);
