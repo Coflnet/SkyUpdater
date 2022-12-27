@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using RestSharp;
+using Microsoft.Extensions.Logging;
 
 namespace Coflnet.Sky.Updater
 {
@@ -20,6 +21,7 @@ namespace Coflnet.Sky.Updater
     {
         private IConfiguration config;
         private string apiKey;
+        private ILogger<MissingChecker> logger;
         static RestClient skyblockClient = new RestClient("https://api.hypixel.net/skyblock/");
 
 
@@ -29,9 +31,10 @@ namespace Coflnet.Sky.Updater
             LingerMs = 80,
         };
 
-        public MissingChecker(IConfiguration config)
+        public MissingChecker(IConfiguration config, ILogger<MissingChecker> logger)
         {
             this.config = config;
+            this.logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -95,24 +98,32 @@ namespace Coflnet.Sky.Updater
             await Task.Delay(delay);
         }
 
-        public static async Task UpdatePlayerAuctions(string playerId, IProducer<string, SaveAuction> p, string apiKey)
+        public async Task UpdatePlayerAuctions(string playerId, IProducer<string, SaveAuction> p, string apiKey)
         {
-            var request = new RestRequest($"auction?key={apiKey}&player={playerId}", Method.Get);
-
-            //Get the response and Deserialize
-            var response = await skyblockClient.ExecuteAsync(request).ConfigureAwait(false);
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-                return;
-            var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
-            foreach (var auction in responseDeserialized.Auctions)
+            var auctions = await GetAuctionOfPlayer(playerId, apiKey).ConfigureAwait(false);
+            foreach (var item in auctions)
             {
-                var item = Updater.ConvertAuction(auction);
                 Console.WriteLine("found auction " + item.Uuid);
                 if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(2))
                     Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, item, null);
                 else if (item.End < DateTime.UtcNow && item.End > DateTime.UtcNow - TimeSpan.FromMinutes(200) && item.HighestBidAmount > 0)
                     Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, p, item, null);
             }
+        }
+
+        public async Task<IEnumerable<SaveAuction>> GetAuctionOfPlayer(string playerId, string apiKey)
+        {
+            var request = new RestRequest($"auction?key={apiKey}&player={playerId}", Method.Get);
+
+            //Get the response and Deserialize
+            var response = await skyblockClient.ExecuteAsync(request).ConfigureAwait(false);
+            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+            {
+                logger.LogError("error getting auctions " + response.Content);
+                return new SaveAuction[0];
+            }
+            var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
+            return responseDeserialized.Auctions.Select(Updater.ConvertAuction);
         }
 
         public class AuctionsByPlayer
