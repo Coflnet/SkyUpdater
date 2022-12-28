@@ -31,7 +31,7 @@ namespace Coflnet.Sky.Updater
         private HypixelApi apiClient;
         private bool abort;
         private static bool minimumOutput;
-        ItemSkinHandler skinHandler;
+        IItemSkinHandler skinHandler;
 
         private ItemDetailsExtractor extractor = new ItemDetailsExtractor();
 
@@ -83,7 +83,7 @@ namespace Coflnet.Sky.Updater
         /// </summary>
         TaskFactory taskFactory;
 
-        public Updater(string apiKey, ItemSkinHandler skinHandler)
+        public Updater(string apiKey, IItemSkinHandler skinHandler)
         {
             this.apiKey = apiKey;
             this.apiClient = new Hypixel.NET.HypixelApi(apiKey, 1);
