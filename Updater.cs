@@ -569,7 +569,7 @@ namespace Coflnet.Sky.Updater
 
         public static SaveAuction ConvertAuction(Auction auction)
         {
-            return ConvertAuction(auction, default);
+            return ConvertAuction(auction, DateTime.UtcNow);
         }
 
         public static SaveAuction ConvertAuction(Auction auction, DateTime apiUpdate)
