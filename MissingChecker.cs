@@ -111,7 +111,7 @@ namespace Coflnet.Sky.Updater
                 Console.WriteLine("found auction " + item.Uuid);
                 if (addTag.Key != null)
                     item.Context[addTag.Key] = addTag.Value;
-                if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(2))
+                if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(1))
                     Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, item, null);
                 else if (item.End < DateTime.UtcNow && item.End > DateTime.UtcNow - TimeSpan.FromMinutes(200) && item.HighestBidAmount > 0)
                     Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, p, item, null);
