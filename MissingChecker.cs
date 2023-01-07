@@ -80,7 +80,7 @@ namespace Coflnet.Sky.Updater
                 {
                     try
                     {
-                        await UpdatePlayerAuctions(playerId, p, apiKey).ConfigureAwait(false);
+                        await UpdatePlayerAuctions(playerId, p, apiKey, new("pre-api", "#cofl")).ConfigureAwait(false);
                     }
                     catch (Exception e)
                     {
