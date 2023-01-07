@@ -6,6 +6,7 @@ using Coflnet.Sky.Items.Client.Api;
 using System.Collections.Concurrent;
 using Coflnet.Sky.Updater.Models;
 using Coflnet.Sky.Core;
+using System.Diagnostics;
 
 namespace Coflnet.Sky.Updater;
 
@@ -18,6 +19,7 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
 {
     private Sky.Items.Client.Api.IItemsApi itemsApi;
     private ConcurrentDictionary<string, bool> skinNames = new();
+    private ActivitySource activitySource;
 
     public ItemSkinHandler(IItemsApi itemsApi)
     {
@@ -30,6 +32,7 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
         {
             try
             {
+                using var activity = activitySource.StartActivity("UpdateSkins");
                 var items = await itemsApi.ItemsNoiconGetAsync(0, stoppingToken);
                 skinNames.Clear();
                 foreach (var item in items)

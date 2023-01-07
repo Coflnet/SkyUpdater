@@ -21,7 +21,6 @@
 
   <ItemGroup>
     <PackageReference Include="RestSharp" Version="108.0.3" />
-    <PackageReference Include="Coflnet.Sky.Items.Client" Version="0.8.0" />
     <PackageReference Include="AspNetCoreRateLimit" Version="4.0.1" />
     <PackageReference Include="RateLimiter" Version="2.2.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.1.5" />
