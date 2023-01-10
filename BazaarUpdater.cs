@@ -18,6 +18,7 @@ namespace Coflnet.Sky.Updater
         public static Dictionary<string, QuickStatus> LastStats = new Dictionary<string, QuickStatus>();
 
         public static readonly string KafkaTopic = SimplerConfig.Config.Instance["TOPICS:BAZAAR"];
+        protected int SecondsBetweenUpdates = 10;
 
         private async Task PullAndSave(HypixelApi api, int i)
         {
@@ -64,9 +65,9 @@ namespace Coflnet.Sky.Updater
             await ProduceIntoQueue(pull);
         }
 
-        private static async Task WaitForServerCacheRefresh(int i, DateTime start)
+        private async Task WaitForServerCacheRefresh(int i, DateTime start)
         {
-            var timeToSleep = start.Add(new TimeSpan(0, 0, 0, 10)) - DateTime.Now;
+            var timeToSleep = start.Add(TimeSpan.FromSeconds(SecondsBetweenUpdates)) - DateTime.Now;
             Console.Write($"\r {i} {timeToSleep}");
             if (timeToSleep.Seconds > 0)
                 await Task.Delay(timeToSleep);
