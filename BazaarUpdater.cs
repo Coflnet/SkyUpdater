@@ -19,8 +19,7 @@ namespace Coflnet.Sky.Updater
 
         public static readonly string KafkaTopic = SimplerConfig.Config.Instance["TOPICS:BAZAAR"];
 
-
-        private static async Task PullAndSave(HypixelApi api, int i)
+        private async Task PullAndSave(HypixelApi api, int i)
         {
             var result = await api.GetBazaarProductsAsync();
             var pull = new BazaarPull()
@@ -65,8 +64,6 @@ namespace Coflnet.Sky.Updater
             await ProduceIntoQueue(pull);
         }
 
-
-
         private static async Task WaitForServerCacheRefresh(int i, DateTime start)
         {
             var timeToSleep = start.Add(new TimeSpan(0, 0, 0, 10)) - DateTime.Now;
@@ -109,7 +106,7 @@ namespace Coflnet.Sky.Updater
             LingerMs = 0
         };
 
-        private static Task ProduceIntoQueue(BazaarPull pull)
+        protected virtual Task ProduceIntoQueue(BazaarPull pull)
         {
             using (var p = new ProducerBuilder<string, BazaarPull>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<BazaarPull>()).Build())
             {
@@ -121,8 +118,6 @@ namespace Coflnet.Sky.Updater
                 return Task.CompletedTask;
             }
         }
-
-
 
         internal void Stop()
         {
