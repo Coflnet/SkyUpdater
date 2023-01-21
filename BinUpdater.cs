@@ -80,7 +80,7 @@ namespace Coflnet.Sky.Updater
                         },
                     HighestBidAmount = item.Price,
                     Bin = item.BuyItemNow,
-                    End = DateTime.Now,
+                    End = item.TimeStamp,
                     UId = AuctionService.Instance.GetId(item.Uuid)
                 };
                 NBT.FillDetails(a, item.ItemBytes, true);
