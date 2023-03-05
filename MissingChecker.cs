@@ -126,7 +126,7 @@ namespace Coflnet.Sky.Updater
             var response = await skyblockClient.ExecuteAsync(request).ConfigureAwait(false);
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
-                logger.LogError("error getting auctions " + response.Content);
+                logger.LogError($"error getting auctions status {response.StatusCode} " + response.Content);
                 return new SaveAuction[0];
             }
             var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
