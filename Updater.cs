@@ -223,9 +223,9 @@ namespace Coflnet.Sky.Updater
                             }
 
                             var val = await Save(res, lastUpdate, sumary, p, scope.Span.Context);
-                            scope.Span.SetTag("lastUpdated", res.LastUpdated.ToString());
+                            scope.Span?.SetTag("lastUpdated", res.LastUpdated.ToString());
                             if (res.LastUpdated == updateStartTime)
-                                scope.Span.SetTag("notUpdated", true);
+                                scope.Span?.SetTag("notUpdated", true);
                             scope.Span.Log($"Loaded {val}");
                             lock (sumloc)
                             {
@@ -237,7 +237,7 @@ namespace Coflnet.Sky.Updater
                         }
                         catch (Exception e)
                         {
-                            scope.Span.SetTag("error", true);
+                            scope.Span?.SetTag("error", true);
                             try // again
                             {
                                 var res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
@@ -666,8 +666,7 @@ namespace Coflnet.Sky.Updater
         {
             foreach (var item in auctionsToAdd)
             {
-                var builder = activitySource.CreateActivity("Produce", ActivityKind.Server).AddTag("topic", targetTopic);
-                var span = builder.Start();
+                var span = activitySource.CreateActivity("Produce", ActivityKind.Server)?.AddTag("topic", targetTopic)?.Start();
                 item.TraceContext = new Tracing.TextMap();
                 ProduceIntoTopic(targetTopic, p, item, span);
             }
