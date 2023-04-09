@@ -11,6 +11,7 @@ using Confluent.Kafka;
 using Coflnet.Sky.Core;
 using Newtonsoft.Json;
 using RestSharp;
+using System.Diagnostics;
 
 namespace Coflnet.Sky.Updater
 {
@@ -25,6 +26,12 @@ namespace Coflnet.Sky.Updater
             LogConnectionClose = false
         };
         private static HttpClient httpClient = new HttpClient();
+        private ActivitySource activitySource;
+
+        public NewUpdater(ActivitySource activitySource)
+        {
+            this.activitySource = activitySource;
+        }
 
         public async Task DoUpdates(int index, CancellationToken token)
         {
@@ -33,8 +40,7 @@ namespace Coflnet.Sky.Updater
             {
                 try
                 {
-                    var tracer = OpenTracing.Util.GlobalTracer.Instance;
-                    using var span = tracer.BuildSpan("FastUpdate").StartActive();
+                    using var span = activitySource.CreateActivity("FastUpdate", ActivityKind.Server).Start();
                     using var p = GetProducer();
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
@@ -46,7 +52,7 @@ namespace Coflnet.Sky.Updater
                         if (waitTime < TimeSpan.FromSeconds(0))
                             waitTime = TimeSpan.FromSeconds(0);
                         await Task.Delay(waitTime);
-                        using var siteSpan = tracer.BuildSpan("FastUpdate").AsChildOf(span.Span).WithTag("page", page).StartActive();
+                        using var siteSpan = activitySource.CreateActivity("FastUpdate", ActivityKind.Server).AddTag("page", page).Start();
                         DateTime time = await DoOneUpdate(lastUpdate, p, page, siteSpan);
                         //var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
                         if (page < 20)
@@ -93,7 +99,7 @@ namespace Coflnet.Sky.Updater
 
         }
 
-        protected virtual async Task<DateTime> DoOneUpdate(DateTime lastUpdate, IProducer<string, SaveAuction> p, int page, OpenTracing.IScope siteSpan)
+        protected virtual async Task<DateTime> DoOneUpdate(DateTime lastUpdate, IProducer<string, SaveAuction> p, int page, Activity siteSpan)
         {
             var pageToken = new CancellationTokenSource(20000);
             var result = await GetAndSavePage(page, p, lastUpdate, siteSpan, pageToken, 0);
@@ -110,7 +116,7 @@ namespace Coflnet.Sky.Updater
             return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build();
         }
 
-        protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, OpenTracing.IScope siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0)
+        protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, Activity siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0)
         {
             await Task.Delay(iter * 200);
             if (pageUpdate.Token.IsCancellationRequested)
@@ -187,7 +193,7 @@ namespace Coflnet.Sky.Updater
                             // give up and retry next minute
                             return (lastUpdate, 0);
                         }
-                        siteSpan.Span.SetTag("try", tryCount);
+                        siteSpan.SetTag("try", tryCount);
                         // wait for the server cache to refresh
                         await Task.Delay(REQUEST_BACKOF_DELAY * tryCount);
                         continue;
@@ -203,7 +209,7 @@ namespace Coflnet.Sky.Updater
                     {
                         if (auction.Start < lastUpdate)
                             continue;
-                        var prodSpan = OpenTracing.Util.GlobalTracer.Instance.BuildSpan("Prod").AsChildOf(siteSpan?.Span).Start();
+                        using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server).Start();
                         FoundNew(pageId, p, page, tryCount, auction, prodSpan);
                         if (count == 0)
                         {
@@ -232,7 +238,7 @@ namespace Coflnet.Sky.Updater
             return (page.LastUpdated, age);
         }
 
-        protected virtual void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, OpenTracing.ISpan prodSpan)
+        protected virtual void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, Activity prodSpan)
         {
             var a = Updater.ConvertAuction(auction, page.LastUpdated);
             a.Context["upage"] = pageId.ToString();
@@ -254,9 +260,11 @@ namespace Coflnet.Sky.Updater
             return _restClient;
         }
 
-        private static void LogHeaderName(OpenTracing.IScope siteSpan, HttpResponseMessage s, string headerName)
+        private static void LogHeaderName(Activity siteSpan, HttpResponseMessage s, string headerName)
         {
-            siteSpan?.Span?.Log($"{headerName}: " + s.Headers.Where(h => h.Key.ToLower() == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault());
+            siteSpan?.AddEvent(new("log", default, new(new Dictionary<string, object>() { { 
+                "message", $"{headerName}: " + s.Headers.Where(h => h.Key.ToLower() == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault()}
+                })));
         }
     }
 }

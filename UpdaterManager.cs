@@ -4,20 +4,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Coflnet.Sky.Core;
+using System.Diagnostics;
 
 namespace Coflnet.Sky.Updater
 {
     public class UpdaterManager : BackgroundService
     {
         ItemSkinHandler skinHandler;
-        public UpdaterManager(ItemSkinHandler skinHandler)
+        ActivitySource activitySource;
+        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource)
         {
             this.skinHandler = skinHandler;
+            this.activitySource = activitySource;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var bazzar = new BazaarUpdater();
-            var updater = new Updater(null, skinHandler);
+            var updater = new Updater(null, skinHandler, activitySource);
             var loading = ItemDetails.Instance.LoadFromDB();
 
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))

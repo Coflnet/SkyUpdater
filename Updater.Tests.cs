@@ -22,7 +22,7 @@ namespace Coflnet.Sky.Updater.Tests
         //[Test]
         public async Task Parse()
         {
-            var update = new TestUpdater();
+            var update = new TestUpdater(null);
 
             var host = Program.CreateHostBuilder(new string[]{"--urls=http://localhost:6001/"}).Build();
             var cancleToken = new CancellationTokenSource(8000).Token;
@@ -50,6 +50,10 @@ namespace Coflnet.Sky.Updater.Tests
         {
             protected override string ApiBaseUrl => "http://localhost:6001";
             public FakeProducer producer = new FakeProducer();
+
+            public TestUpdater(ActivitySource activitySource) : base(activitySource)
+            {
+            }
 
             public async Task DoAnUpdate()
             {

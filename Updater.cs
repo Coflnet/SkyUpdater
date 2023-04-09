@@ -16,6 +16,7 @@ using OpenTracing;
 using OpenTracing.Propagation;
 using OpenTracing.Util;
 using RestSharp;
+using System.Diagnostics;
 
 namespace Coflnet.Sky.Updater
 {
@@ -77,13 +78,14 @@ namespace Coflnet.Sky.Updater
 
         ConcurrentDictionary<string, int> AuctionCount;
         public static ConcurrentDictionary<string, int> LastAuctionCount;
+        public static ActivitySource activitySource;
 
         /// <summary>
         /// Limited task factory
         /// </summary>
         TaskFactory taskFactory;
 
-        public Updater(string apiKey, IItemSkinHandler skinHandler)
+        public Updater(string apiKey, IItemSkinHandler skinHandler, ActivitySource pactivitySource)
         {
             this.apiKey = apiKey;
             this.apiClient = new Hypixel.NET.HypixelApi(apiKey, 1);
@@ -91,6 +93,7 @@ namespace Coflnet.Sky.Updater
             var scheduler = new LimitedConcurrencyLevelTaskScheduler(2);
             taskFactory = new TaskFactory(scheduler);
             this.skinHandler = skinHandler;
+            activitySource = pactivitySource;
         }
 
         /// <summary>
@@ -441,7 +444,7 @@ namespace Coflnet.Sky.Updater
                 var updaterStart = DateTime.Now.RoundDown(TimeSpan.FromMinutes(1));
                 if (updaterIndex >= 2)
                 {
-                    await new NewUpdater().DoUpdates(updaterIndex - 2, token);
+                    await new NewUpdater(activitySource).DoUpdates(updaterIndex - 2, token);
                     return;
                 }
                 Console.WriteLine("Starting updater with index " + updaterIndex);
@@ -639,9 +642,9 @@ namespace Coflnet.Sky.Updater
             LingerMs = 10,
         };
 
-        public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, IScope span)
+        public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, Activity span)
         {
-            ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic, span?.Span?.Context);
+            ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic);
         }
 
         private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ISpanContext pageSpanContext = null)
@@ -661,21 +664,16 @@ namespace Coflnet.Sky.Updater
             Confluent.Kafka.IProducer<string, SaveAuction> p,
             ISpanContext pageSpanContext = null)
         {
-            var tracer = OpenTracing.Util.GlobalTracer.Instance;
             foreach (var item in auctionsToAdd)
             {
-                var builder = tracer.BuildSpan("Produce").WithTag("topic", targetTopic);
-                if (pageSpanContext != null && targetTopic != SoldAuctionsTopic)
-                    builder = builder.AsChildOf(pageSpanContext);
+                var builder = activitySource.CreateActivity("Produce", ActivityKind.Server).AddTag("topic", targetTopic);
                 var span = builder.Start();
                 item.TraceContext = new Tracing.TextMap();
-                tracer.Inject(span.Context, BuiltinFormats.TextMap, item.TraceContext);
-
                 ProduceIntoTopic(targetTopic, p, item, span);
             }
         }
 
-        public static void ProduceIntoTopic(string targetTopic, IProducer<string, SaveAuction> p, SaveAuction item, ISpan span)
+        public static void ProduceIntoTopic(string targetTopic, IProducer<string, SaveAuction> p, SaveAuction item, Activity span)
         {
             if (targetTopic == NewAuctionsTopic)
                 timeToFind.Observe((DateTime.Now - item.FindTime).TotalSeconds);
@@ -688,7 +686,7 @@ namespace Coflnet.Sky.Updater
                         $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
                 if (r.Topic == NewAuctionsTopic)
                     sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
-                span?.Finish();
+                span?.Dispose();
             });
         }
 
