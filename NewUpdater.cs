@@ -40,7 +40,7 @@ namespace Coflnet.Sky.Updater
             {
                 try
                 {
-                    using var span = activitySource.CreateActivity("FastUpdate", ActivityKind.Server).Start();
+                    using var span = activitySource.CreateActivity("FastUpdate", ActivityKind.Server)?.Start();
                     using var p = GetProducer();
 
                     var tasks = new List<ConfiguredTaskAwaitable>();
@@ -52,7 +52,7 @@ namespace Coflnet.Sky.Updater
                         if (waitTime < TimeSpan.FromSeconds(0))
                             waitTime = TimeSpan.FromSeconds(0);
                         await Task.Delay(waitTime);
-                        using var siteSpan = activitySource.CreateActivity("FastUpdate", ActivityKind.Server)?.AddTag("page", page).Start();
+                        using var siteSpan = activitySource.CreateActivity("FastUpdate", ActivityKind.Server)?.AddTag("page", page)?.Start();
                         DateTime time = await DoOneUpdate(lastUpdate, p, page, siteSpan);
                         //var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
                         if (page < 20)
@@ -209,7 +209,7 @@ namespace Coflnet.Sky.Updater
                     {
                         if (auction.Start < lastUpdate)
                             continue;
-                        using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server).Start();
+                        using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();
                         FoundNew(pageId, p, page, tryCount, auction, prodSpan);
                         if (count == 0)
                         {

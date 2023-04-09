@@ -136,9 +136,7 @@ namespace Coflnet.Sky.Updater
 
         async Task<DateTime> RunUpdate(DateTime updateStartTime)
         {
-
-            var tracer = GlobalTracer.Instance;
-            using var updateScope = tracer.BuildSpan("RunUpdate").StartActive();
+            using var updateScope = activitySource.CreateActivity("RunUpdate", ActivityKind.Server)?.Start();
             int max = 1;
             var lastUpdate = lastUpdateDone;
 
@@ -184,8 +182,8 @@ namespace Coflnet.Sky.Updater
                     await Task.Delay(MillisecondsDelay);
                     tasks.Add(taskFactory.StartNew(async () =>
                     {
-                        var tracer = GlobalTracer.Instance;
-                        using var scope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive();
+                        var tracer = activitySource;
+                        using var scope = tracer.StartActivity("LoadPage")?.SetTag("page", index).Start();
                         try
                         {
                             var page = index;
@@ -196,7 +194,7 @@ namespace Coflnet.Sky.Updater
                                 page = (index + 40) % max;
 
                             AuctionPage res;
-                            using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
+                            using (var libLoadScope = tracer.StartActivity("LoadPage")?.AddTag("page", index).Start())
                             {
                                 res = index != 0 ? await LoadPage(page, lastUpdate).ConfigureAwait(false) : firstPage;
                             }
@@ -204,7 +202,7 @@ namespace Coflnet.Sky.Updater
                             {
                                 // tripple the backoff because these will be more
                                 await Task.Delay(REQUEST_BACKOF_DELAY * 3);
-                                using (var libLoadScope = tracer.BuildSpan("LoadPage").WithTag("page", index).StartActive())
+                                using (var libLoadScope = tracer.StartActivity("LoadPage")?.AddTag("page", index).Start())
                                 {
                                     res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
                                 }
@@ -222,11 +220,10 @@ namespace Coflnet.Sky.Updater
                                 Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
                             }
 
-                            var val = await Save(res, lastUpdate, sumary, p, scope.Span.Context);
-                            scope.Span?.SetTag("lastUpdated", res.LastUpdated.ToString());
+                            var val = await Save(res, lastUpdate, sumary, p, scope?.Context ?? default);
+                            scope?.SetTag("lastUpdated", res.LastUpdated.ToString());
                             if (res.LastUpdated == updateStartTime)
-                                scope.Span?.SetTag("notUpdated", true);
-                            scope.Span.Log($"Loaded {val}");
+                                scope?.SetTag("notUpdated", true);
                             lock (sumloc)
                             {
                                 sum += val;
@@ -237,11 +234,11 @@ namespace Coflnet.Sky.Updater
                         }
                         catch (Exception e)
                         {
-                            scope.Span?.SetTag("error", true);
+                            scope?.SetTag("error", true);
                             try // again
                             {
                                 var res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
-                                var val = await Save(res, lastUpdate, sumary, p, scope.Span.Context);
+                                var val = await Save(res, lastUpdate, sumary, p, scope?.Context ?? default);
                             }
                             catch (System.Exception)
                             {
@@ -492,10 +489,10 @@ namespace Coflnet.Sky.Updater
                 Console.Write($"\r Loading: ({i}/{max}) Done With: {doneCont} Total:{sum} {timeEst:mm\\:ss}");
         }
 
-        async Task<int> Save(AuctionPage res, DateTime lastUpdate, AhStateSumary sumary, IProducer<string, SaveAuction> p, ISpanContext pageSpanContext)
+        async Task<int> Save(AuctionPage res, DateTime lastUpdate, AhStateSumary sumary, IProducer<string, SaveAuction> p, ActivityContext pageSpanContext)
         {
             List<SaveAuction> processed = new List<SaveAuction>();
-            using (var span = GlobalTracer.Instance.BuildSpan("parsePage").AsChildOf(pageSpanContext).StartActive())
+            using (var span = activitySource.CreateActivity("parsePage", ActivityKind.Server, pageSpanContext)?.Start())
             {
                 processed = res.Auctions.Where(item =>
                     {
@@ -647,7 +644,7 @@ namespace Coflnet.Sky.Updater
             ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic);
         }
 
-        private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ISpanContext pageSpanContext = null)
+        private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ActivityContext pageSpanContext = default)
         {
             using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
             {
@@ -662,7 +659,7 @@ namespace Coflnet.Sky.Updater
             IEnumerable<SaveAuction> auctionsToAdd,
             string targetTopic,
             Confluent.Kafka.IProducer<string, SaveAuction> p,
-            ISpanContext pageSpanContext = null)
+            ActivityContext pageSpanContext = default)
         {
             foreach (var item in auctionsToAdd)
             {
