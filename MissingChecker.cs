@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using RestSharp;
 using Microsoft.Extensions.Logging;
+using Coflnet.Kafka;
 
 namespace Coflnet.Sky.Updater
 {
@@ -22,19 +23,15 @@ namespace Coflnet.Sky.Updater
         private IConfiguration config;
         private string apiKey;
         private ILogger<MissingChecker> logger;
+        private KafkaCreator kafkaCreator;
         static RestClient skyblockClient = new RestClient("https://api.hypixel.net/skyblock/");
 
 
-        private static ProducerConfig producerConfig = new ProducerConfig
-        {
-            BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 80,
-        };
-
-        public MissingChecker(IConfiguration config, ILogger<MissingChecker> logger)
+        public MissingChecker(IConfiguration config, ILogger<MissingChecker> logger, KafkaCreator kafkaCreator)
         {
             this.config = config;
             this.logger = logger;
+            this.kafkaCreator = kafkaCreator;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,7 +41,7 @@ namespace Coflnet.Sky.Updater
                 return; // no key for this instance
             apiKey = keys[Updater.updaterIndex];
             await Kafka.KafkaConsumer.ConsumeBatch<SaveAuction>(
-                config["KAFKA_HOST"],
+                config,
                 config["TOPICS:AUCTION_CHECK"],
                 async auctions =>
                 {
@@ -74,7 +71,7 @@ namespace Coflnet.Sky.Updater
             var ids = auctions.GroupBy(a => a.AuctioneerId).Select(a => a.First().AuctioneerId).ToList();
 
             var start = DateTime.Now;
-            using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build())
+            using (var p = kafkaCreator.BuildProducer<string, SaveAuction>())
             {
                 await Task.WhenAll(ids.Select(async playerId =>
                 {

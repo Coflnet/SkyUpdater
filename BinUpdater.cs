@@ -44,14 +44,14 @@ namespace Coflnet.Sky.Updater
 
         private DateTime historyLimit;
 
-        public static async Task GrabAuctions(HypixelApi hypixelApi)
+        public static async Task<List<SaveAuction>> GrabAuctions(HypixelApi hypixelApi)
         {
             using var span = Updater.activitySource.CreateActivity("SoldAuctions",System.Diagnostics.ActivityKind.Server).Start();
             List<SaveAuction> auctions = await DownloadSells("https://api.hypixel.net");
-            Updater.AddSoldAuctions(auctions, span);
+            //Updater.AddSoldAuctions(auctions, span);
 
             SoldLastMin = auctions;
-
+            return auctions;
         }
 
         public static async Task<List<SaveAuction>> DownloadSells(string BaseUrl)

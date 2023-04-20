@@ -12,6 +12,7 @@ using Coflnet.Sky.Core;
 using Newtonsoft.Json;
 using RestSharp;
 using System.Diagnostics;
+using Coflnet.Kafka;
 
 namespace Coflnet.Sky.Updater
 {
@@ -27,10 +28,12 @@ namespace Coflnet.Sky.Updater
         };
         private static HttpClient httpClient = new HttpClient();
         private ActivitySource activitySource;
+        private KafkaCreator kafkaCreator;
 
-        public NewUpdater(ActivitySource activitySource)
+        public NewUpdater(ActivitySource activitySource, KafkaCreator kafkaCreator)
         {
             this.activitySource = activitySource;
+            this.kafkaCreator = kafkaCreator;
         }
 
         public async Task DoUpdates(int index, CancellationToken token)
@@ -108,12 +111,16 @@ namespace Coflnet.Sky.Updater
 
         protected virtual void ProduceSells(List<SaveAuction> binupdate)
         {
-            Updater.AddSoldAuctions(binupdate, null);
+            using var p = GetProducer();
+            foreach (var item in binupdate)
+            {
+                p.Produce(Updater.SoldAuctionsTopic, new Message<string, SaveAuction> { Key = item.Uuid, Value = item });
+            }
         }
 
         protected virtual IProducer<string, SaveAuction> GetProducer()
         {
-            return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<SaveAuction>()).Build();
+            return kafkaCreator.BuildProducer<string, SaveAuction>();
         }
 
         protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, Activity siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0)

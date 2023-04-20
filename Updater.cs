@@ -17,6 +17,7 @@ using OpenTracing.Propagation;
 using OpenTracing.Util;
 using RestSharp;
 using System.Diagnostics;
+using Coflnet.Kafka;
 
 namespace Coflnet.Sky.Updater
 {
@@ -79,13 +80,14 @@ namespace Coflnet.Sky.Updater
         ConcurrentDictionary<string, int> AuctionCount;
         public static ConcurrentDictionary<string, int> LastAuctionCount;
         public static ActivitySource activitySource;
+        public KafkaCreator kafkaCreator;
 
         /// <summary>
         /// Limited task factory
         /// </summary>
         TaskFactory taskFactory;
 
-        public Updater(string apiKey, IItemSkinHandler skinHandler, ActivitySource pactivitySource)
+        public Updater(string apiKey, IItemSkinHandler skinHandler, ActivitySource pactivitySource, KafkaCreator kafkaCreator)
         {
             this.apiKey = apiKey;
             this.apiClient = new Hypixel.NET.HypixelApi(apiKey, 1);
@@ -94,6 +96,7 @@ namespace Coflnet.Sky.Updater
             taskFactory = new TaskFactory(scheduler);
             this.skinHandler = skinHandler;
             activitySource = pactivitySource;
+            this.kafkaCreator = kafkaCreator;
         }
 
         /// <summary>
@@ -274,6 +277,7 @@ namespace Coflnet.Sky.Updater
             {
                 RemoveCanceled(lastUuids);
             }).ConfigureAwait(false);
+            AddSoldAuctions(await binupdate, null);
 
             Console.WriteLine($"Updated {sum} auctions {doneCont} pages");
             UpdateSize = sum;
@@ -314,7 +318,7 @@ namespace Coflnet.Sky.Updater
 
         protected virtual IProducer<string, SaveAuction> GetP()
         {
-            return new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build();
+            return kafkaCreator.BuildProducer<string, SaveAuction>();
         }
 
         private static void ProduceSumary(AhStateSumary sumary, IProducer<string, AhStateSumary> p)
@@ -373,7 +377,7 @@ namespace Coflnet.Sky.Updater
         /// Will check 5 updates to make sure there wasn't just a page missing
         /// </summary>
         /// <param name="lastUuids"></param>
-        private static void RemoveCanceled(ConcurrentDictionary<string, bool> lastUuids)
+        private void RemoveCanceled(ConcurrentDictionary<string, bool> lastUuids)
         {
             foreach (var item in ActiveAuctions.Keys)
             {
@@ -441,7 +445,7 @@ namespace Coflnet.Sky.Updater
                 var updaterStart = DateTime.Now.RoundDown(TimeSpan.FromMinutes(1));
                 if (updaterIndex >= 2)
                 {
-                    await new NewUpdater(activitySource).DoUpdates(updaterIndex - 2, token);
+                    await new NewUpdater(activitySource, kafkaCreator).DoUpdates(updaterIndex - 2, token);
                     return;
                 }
                 Console.WriteLine("Starting updater with index " + updaterIndex);
@@ -639,14 +643,14 @@ namespace Coflnet.Sky.Updater
             LingerMs = 10,
         };
 
-        public static void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, Activity span)
+        public void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, Activity span)
         {
             ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic);
         }
 
-        private static void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ActivityContext pageSpanContext = default)
+        private void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ActivityContext pageSpanContext = default)
         {
-            using (var p = new ProducerBuilder<string, SaveAuction>(producerConfig).SetValueSerializer(Serializer.Instance).Build())
+            using (var p = kafkaCreator.BuildProducer<string, SaveAuction>())
             {
                 ProduceIntoTopic(auctionsToAdd, targetTopic, p, pageSpanContext);
 
@@ -684,11 +688,6 @@ namespace Coflnet.Sky.Updater
                     sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
                 span?.Dispose();
             });
-        }
-
-        public static void AddToFlipperCheckQueue(IEnumerable<SaveAuction> auctionsToAdd)
-        {
-            ProduceIntoTopic(auctionsToAdd, "sky-flipper");
         }
 
         private static int DetermineWorth(int c, SaveAuction auction)

@@ -32,6 +32,7 @@ namespace Coflnet.Sky.Updater
             services.AddSingleton<ItemSkinHandler>();
             services.AddHostedService<ItemSkinHandler>(di => di.GetService<ItemSkinHandler>());
             services.AddHostedService<UpdaterManager>();
+            services.AddSingleton<Kafka.KafkaCreator>();
             services.AddSingleton<Items.Client.Api.IItemsApi, Items.Client.Api.ItemsApi>(sp => new Items.Client.Api.ItemsApi(Configuration["ITEMS_BASE_URL"]));
             services.AddResponseCaching();
             services.AddMemoryCache();

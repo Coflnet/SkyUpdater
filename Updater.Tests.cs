@@ -51,7 +51,7 @@ namespace Coflnet.Sky.Updater.Tests
             protected override string ApiBaseUrl => "http://localhost:6001";
             public FakeProducer producer = new FakeProducer();
 
-            public TestUpdater(ActivitySource activitySource) : base(activitySource)
+            public TestUpdater(ActivitySource activitySource) : base(activitySource, null)
             {
             }
 

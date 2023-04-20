@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Coflnet.Sky.Core;
 using System.Diagnostics;
+using Coflnet.Kafka;
 
 namespace Coflnet.Sky.Updater
 {
@@ -12,15 +13,17 @@ namespace Coflnet.Sky.Updater
     {
         ItemSkinHandler skinHandler;
         ActivitySource activitySource;
-        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource)
+        KafkaCreator kafkaCreator;
+        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, KafkaCreator kafkaCreator)
         {
             this.skinHandler = skinHandler;
             this.activitySource = activitySource;
+            this.kafkaCreator = kafkaCreator;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var bazzar = new BazaarUpdater();
-            var updater = new Updater(null, skinHandler, activitySource);
+            var updater = new Updater(null, skinHandler, activitySource, kafkaCreator);
             var loading = ItemDetails.Instance.LoadFromDB();
 
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
