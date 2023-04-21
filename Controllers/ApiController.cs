@@ -48,26 +48,27 @@ namespace SkyUpdater.Controllers
         [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any)]
         public async Task ProduceMock()
         {
-            using (var p = kafkaCreator.BuildProducer<string, SaveAuction>())
+            using var p = kafkaCreator.BuildProducer<string, SaveAuction>();
+            var result = await p.ProduceAsync(Updater.NewAuctionsTopic, new Message<string, SaveAuction>
             {
-                await p.ProduceAsync(Updater.NewAuctionsTopic, new Message<string, SaveAuction>
+                Key = "test",
+                Value = new SaveAuction
                 {
-                    Key = "test",
-                    Value = new SaveAuction
-                    {
-                        Bin = true,
-                        StartingBid = 100,
-                        Tag = "test",
-                        End = DateTime.Now + TimeSpan.FromMinutes(5),
-                        Start = DateTime.Now,
-                        HighestBidAmount = 100,
-                        Uuid = Guid.NewGuid().ToString(),
-                        AuctioneerId = "384a029294fc445e863f2c42fe9709cb",
-                        Enchantments = new() { new(Enchantment.EnchantmentType.sharpness, 7) },
-                        FlatenedNBT = new()
-                    }
-                });
-            }
+                    Bin = true,
+                    StartingBid = 100,
+                    Tag = "test",
+                    End = DateTime.Now + TimeSpan.FromMinutes(5),
+                    Start = DateTime.Now,
+                    HighestBidAmount = 100,
+                    Uuid = Guid.NewGuid().ToString(),
+                    AuctioneerId = "384a029294fc445e863f2c42fe9709cb",
+                    Enchantments = new() { new(Enchantment.EnchantmentType.sharpness, 7) },
+                    FlatenedNBT = new(),
+                    Bids = new() { new(){Amount=100, Bidder="384a029294fc445e863f2c42fe9709cb"} },
+                }
+            });
+            Console.WriteLine($"Delivered '{result.Value}' to '{result.TopicPartitionOffset}'");
+
         }
     }
 }
