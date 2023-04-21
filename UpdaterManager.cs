@@ -25,14 +25,15 @@ namespace Coflnet.Sky.Updater
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            await kafkaCreator.CreateTopicIfNotExist(topics.AhSumary, 2);
+            Console.WriteLine(JSON.Stringify(topics));
+            await kafkaCreator.CreateTopicIfNotExist(topics.Ah_Sumary, 2);
             await kafkaCreator.CreateTopicIfNotExist(topics.Bazaar, 2);
-            await kafkaCreator.CreateTopicIfNotExist(topics.MissingAuction);
-            await kafkaCreator.CreateTopicIfNotExist(topics.NewAuction);
-            await kafkaCreator.CreateTopicIfNotExist(topics.NewBid);
-            await kafkaCreator.CreateTopicIfNotExist(topics.SoldAuction);
-            await kafkaCreator.CreateTopicIfNotExist(topics.AuctionEnded);
-            await kafkaCreator.CreateTopicIfNotExist(topics.AuctionCheck);
+            await kafkaCreator.CreateTopicIfNotExist(topics.Missing_Auction);
+            await kafkaCreator.CreateTopicIfNotExist(topics.New_Auction);
+            await kafkaCreator.CreateTopicIfNotExist(topics.New_Bid);
+            await kafkaCreator.CreateTopicIfNotExist(topics.Sold_Auction);
+            await kafkaCreator.CreateTopicIfNotExist(topics.Auction_Ended);
+            await kafkaCreator.CreateTopicIfNotExist(topics.Auction_Check);
             
             var bazzar = new BazaarUpdater(kafkaCreator);
             var updater = new Updater(null, skinHandler, activitySource, kafkaCreator);
