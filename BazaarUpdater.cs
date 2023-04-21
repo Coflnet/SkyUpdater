@@ -6,6 +6,7 @@ using Hypixel.NET;
 using System.Threading.Tasks;
 using Confluent.Kafka;
 using dev;
+using Coflnet.Kafka;
 
 namespace Coflnet.Sky.Updater;
 public class BazaarUpdater
@@ -105,10 +106,16 @@ public class BazaarUpdater
         BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
         LingerMs = 0
     };
+    private KafkaCreator kafkaCreator;
+
+    public BazaarUpdater(KafkaCreator kafkaCreator)
+    {
+        this.kafkaCreator = kafkaCreator;
+    }
 
     protected virtual Task ProduceIntoQueue(BazaarPull pull)
     {
-        using (var p = new ProducerBuilder<string, BazaarPull>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<BazaarPull>()).Build())
+        using (var p = kafkaCreator.BuildProducer<string, BazaarPull>())
         {
             p.Produce(KafkaTopic, new Message<string, BazaarPull> { Value = pull, Key = pull.Timestamp.ToString() }, handler =>
             {

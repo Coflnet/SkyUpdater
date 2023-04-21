@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Coflnet.Sky.Core;
 using System.Diagnostics;
 using Coflnet.Kafka;
+using Coflnet.Sky.Updater.Models;
 
 namespace Coflnet.Sky.Updater
 {
@@ -14,15 +15,26 @@ namespace Coflnet.Sky.Updater
         ItemSkinHandler skinHandler;
         ActivitySource activitySource;
         KafkaCreator kafkaCreator;
-        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, KafkaCreator kafkaCreator)
+        Topics topics;
+        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, KafkaCreator kafkaCreator, Topics topics)
         {
             this.skinHandler = skinHandler;
             this.activitySource = activitySource;
             this.kafkaCreator = kafkaCreator;
+            this.topics = topics;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var bazzar = new BazaarUpdater();
+            await kafkaCreator.CreateTopicIfNotExist(topics.AhSumary, 2);
+            await kafkaCreator.CreateTopicIfNotExist(topics.Bazaar, 2);
+            await kafkaCreator.CreateTopicIfNotExist(topics.MissingAuction);
+            await kafkaCreator.CreateTopicIfNotExist(topics.NewAuction);
+            await kafkaCreator.CreateTopicIfNotExist(topics.NewBid);
+            await kafkaCreator.CreateTopicIfNotExist(topics.SoldAuction);
+            await kafkaCreator.CreateTopicIfNotExist(topics.AuctionEnded);
+            await kafkaCreator.CreateTopicIfNotExist(topics.AuctionCheck);
+            
+            var bazzar = new BazaarUpdater(kafkaCreator);
             var updater = new Updater(null, skinHandler, activitySource, kafkaCreator);
             var loading = ItemDetails.Instance.LoadFromDB();
 

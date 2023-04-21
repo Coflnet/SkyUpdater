@@ -313,7 +313,7 @@ namespace Coflnet.Sky.Updater
 
         protected virtual IProducer<string, AhStateSumary> GetSumaryProducer()
         {
-            return new ProducerBuilder<string, AhStateSumary>(producerConfig).SetValueSerializer(SerializerFactory.GetSerializer<AhStateSumary>()).Build();
+            return kafkaCreator.BuildProducer<string, AhStateSumary>();
         }
 
         protected virtual IProducer<string, SaveAuction> GetP()
