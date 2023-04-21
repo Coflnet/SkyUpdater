@@ -60,7 +60,7 @@ namespace SkyUpdater.Controllers
                     End = DateTime.Now + TimeSpan.FromMinutes(5),
                     Start = DateTime.Now,
                     HighestBidAmount = 100,
-                    Uuid = Guid.NewGuid().ToString(),
+                    Uuid = Guid.NewGuid().ToString("N"),
                     AuctioneerId = "384a029294fc445e863f2c42fe9709cb",
                     Enchantments = new() { new(Enchantment.EnchantmentType.sharpness, 7) },
                     FlatenedNBT = new(),
