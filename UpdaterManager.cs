@@ -7,6 +7,7 @@ using Coflnet.Sky.Core;
 using System.Diagnostics;
 using Coflnet.Kafka;
 using Coflnet.Sky.Updater.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace Coflnet.Sky.Updater
 {
@@ -16,16 +17,21 @@ namespace Coflnet.Sky.Updater
         ActivitySource activitySource;
         KafkaCreator kafkaCreator;
         Topics topics;
-        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, KafkaCreator kafkaCreator, Topics topics)
+        IConfiguration config;
+        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, KafkaCreator kafkaCreator, Topics topics, IConfiguration config)
         {
             this.skinHandler = skinHandler;
             this.activitySource = activitySource;
             this.kafkaCreator = kafkaCreator;
             this.topics = topics;
+            this.config = config;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             Console.WriteLine(JSON.Stringify(topics));
+            var cc = KafkaCreator.GetClientConfig(config);
+            cc.SaslPassword = cc.SaslPassword?.Truncate(3);
+            Console.WriteLine(JSON.Stringify(cc));
             await kafkaCreator.CreateTopicIfNotExist(topics.Ah_Sumary, 2);
             await kafkaCreator.CreateTopicIfNotExist(topics.Bazaar, 2);
             await kafkaCreator.CreateTopicIfNotExist(topics.Missing_Auction);
