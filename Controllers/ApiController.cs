@@ -46,12 +46,12 @@ namespace SkyUpdater.Controllers
         [Route("/skyblock/auction")]
         [HttpPost]
         [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any)]
-        public async Task ProduceMock()
+        public async Task ProduceMock(string key)
         {
             using var p = kafkaCreator.BuildProducer<string, SaveAuction>();
             var result = await p.ProduceAsync(Updater.NewAuctionsTopic, new Message<string, SaveAuction>
             {
-                Key = "test",
+                Key = key,
                 Value = new SaveAuction
                 {
                     Bin = true,
