@@ -57,7 +57,7 @@ namespace SkyUpdater.Controllers
                 {
                     Bin = true,
                     StartingBid = 100,
-                    Tag = "test",
+                    Tag = "TEST",
                     ItemName = "Test Item",
                     Tier = Tier.DIVINE,
                     FindTime = DateTime.Now,
