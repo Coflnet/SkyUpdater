@@ -46,9 +46,10 @@ namespace SkyUpdater.Controllers
         [Route("/skyblock/auction")]
         [HttpPost]
         [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any)]
-        public async Task ProduceMock(string key)
+        public async Task<string> ProduceMock(string key)
         {
             using var p = kafkaCreator.BuildProducer<string, SaveAuction>();
+            var uuid = Guid.NewGuid().ToString("N");
             var result = await p.ProduceAsync(Updater.NewAuctionsTopic, new Message<string, SaveAuction>
             {
                 Key = key,
@@ -57,10 +58,15 @@ namespace SkyUpdater.Controllers
                     Bin = true,
                     StartingBid = 100,
                     Tag = "test",
+                    ItemName = "Test Item",
+                    Tier = Tier.DIVINE,
+                    FindTime = DateTime.Now,
+                    NbtData = new(),
+                    UId = 1,
                     End = DateTime.Now + TimeSpan.FromMinutes(5),
                     Start = DateTime.Now,
                     HighestBidAmount = 100,
-                    Uuid = Guid.NewGuid().ToString("N"),
+                    Uuid = uuid,
                     AuctioneerId = "384a029294fc445e863f2c42fe9709cb",
                     Enchantments = new() { new(Enchantment.EnchantmentType.sharpness, 7) },
                     FlatenedNBT = new(),
@@ -68,7 +74,7 @@ namespace SkyUpdater.Controllers
                 }
             });
             Console.WriteLine($"Delivered '{result.Value}' to '{result.TopicPartitionOffset}'");
-
+            return uuid;
         }
     }
 }
