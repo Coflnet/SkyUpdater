@@ -29,7 +29,6 @@ namespace Coflnet.Sky.Updater
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "SkyUpdater", Version = "v1" });
             });
             services.AddJaeger(Configuration, 0.1);
-            services.AddHostedService<MissingChecker>();
             services.AddSingleton<ItemSkinHandler>();
             services.AddHostedService<ItemSkinHandler>(di => di.GetService<ItemSkinHandler>());
             services.AddHostedService<UpdaterManager>();
