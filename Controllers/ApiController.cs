@@ -62,7 +62,7 @@ namespace SkyUpdater.Controllers
                     Tier = Tier.DIVINE,
                     FindTime = DateTime.Now,
                     NbtData = new(),
-                    UId = 1,
+                    UId = DateTime.Now.Ticks,
                     End = DateTime.Now + TimeSpan.FromMinutes(5),
                     Start = DateTime.Now,
                     HighestBidAmount = 100,

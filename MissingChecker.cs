@@ -95,7 +95,7 @@ namespace Coflnet.Sky.Updater
             await Task.Delay(delay);
         }
 
-        public async Task UpdatePlayerAuctions(string playerId, IProducer<string, SaveAuction> p, string apiKey, KeyValuePair<string,string> addTag = default)
+        public async Task UpdatePlayerAuctions(string playerId, IProducer<string, SaveAuction> p, string apiKey, KeyValuePair<string, string> addTag = default)
         {
             var auctions = await GetAuctionOfPlayer(playerId, apiKey).ConfigureAwait(false);
             ProduceAuctions(p, addTag, auctions);
@@ -105,7 +105,8 @@ namespace Coflnet.Sky.Updater
         {
             foreach (var item in auctions)
             {
-                Console.WriteLine("found auction " + item.Uuid);
+                if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(1))
+                    Console.WriteLine("found new auction " + item.Uuid);
                 if (addTag.Key != null)
                     item.Context[addTag.Key] = addTag.Value;
                 if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(1))
