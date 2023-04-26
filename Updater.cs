@@ -643,7 +643,7 @@ namespace Coflnet.Sky.Updater
             LingerMs = 10,
         };
 
-        public void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, Activity span)
+        public virtual void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, Activity span)
         {
             ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic);
         }
