@@ -53,7 +53,7 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
         var tag = parsed.Tag;
         if (tag == null)
             return;
-        if (!skinNames.TryGetValue(tag, out var saved) && saved)
+        if (!skinNames.TryGetValue(tag, out var saved) || saved)
             return;
         skinNames[tag] = true;
         Task.Run(async () =>
