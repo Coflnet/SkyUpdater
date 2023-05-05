@@ -34,7 +34,6 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
             {
                 using var activity = activitySource?.StartActivity("UpdateSkins");
                 var items = await itemsApi.ItemsNoiconGetAsync(0, stoppingToken);
-                skinNames.Clear();
                 foreach (var item in items)
                 {
                     skinNames.TryAdd(item.Tag, false);
