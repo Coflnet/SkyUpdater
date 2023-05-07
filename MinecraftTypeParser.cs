@@ -17,10 +17,12 @@ namespace Coflnet.Sky.Updater
 
         public static Dictionary<string,Item> Items {get; private set;}
         private static Dictionary<string,Item> ItemTypes = new Dictionary<string, Item>();
+        private static Dictionary<int,string> IdToName = new ();
 
         static MinecraftTypeParser()
         {
             Instance = new MinecraftTypeParser();
+            FileController.dataPaht = "data";
             if(FileController.Exists("minecraftTypes"))
             {
                 LoadFromDisc();
@@ -93,11 +95,22 @@ namespace Coflnet.Sky.Updater
             {
                 if(!Items.ContainsKey(item.name))
                     Items.Add(item.name,item);
+                IdToName.TryAdd(item.type, item.text_type.ToUpper());
             }
 
             FileController.SaveAs("minecraftItems",Items);
       
             BuildTypeCache();
+        }
+
+        public string ItemTagFromId(int id, int meta)
+        {
+            IdToName.TryGetValue(id, out string name);
+            if(name == "skull")
+                name = "SKULL_ITEM";
+            if(meta != 0)
+                name += ":"+meta;
+            return name.ToUpper();
         }
 
         public string Parse(Auction a)

@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using Coflnet.Sky.Updater.Models;
 using Coflnet.Sky.Core;
 using System.Diagnostics;
+using fNbt;
 
 namespace Coflnet.Sky.Updater;
 
@@ -60,11 +61,26 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
         {
             try
             {
+                Console.WriteLine($"loading skin for {tag}");
                 var skullUrl = NBT.SkullUrl(auction.ItemBytes);
                 if (skullUrl == null)
+                {
+                    Console.WriteLine($"no skin found for {tag} {auction.ItemBytes}");
+
+                    var root = NBT.File(Convert.FromBase64String(auction.ItemBytes)).RootTag.Get<NbtList>("i")
+                    .Get<NbtCompound>(0);
+                    var id = root.Get("id").ShortValue;
+                    var meta = root.Get("Damage").ShortValue;
+                    var displayTag = MinecraftTypeParser.Instance.ItemTagFromId(id, meta);
+                    var url = $"https://sky.coflnet.com/static/icon/{displayTag}";
+                    Console.WriteLine($"trying {url} for {tag} {id}");
+                    if (displayTag != null)
+                        await itemsApi.ItemItemTagTexturePostAsync(tag, tag, url);
+                    //skinNames[tag] = false;
                     return;
+                }
                 await itemsApi.ItemItemTagTexturePostAsync(tag, tag, skullUrl);
-                Console.WriteLine($"updated skin for {tag}");
+                Console.WriteLine($"updated skin for {tag} to {skullUrl}");
             }
             catch (Exception e)
             {
