@@ -108,7 +108,7 @@ namespace Coflnet.Sky.Updater
             IdToName.TryGetValue(id, out string name);
             if(name == "skull")
                 name = "SKULL_ITEM";
-            if(meta != 0)
+            if(meta != 0 && name.ToUpper() != "POTION")
                 name += ":"+meta;
             return name.ToUpper();
         }
