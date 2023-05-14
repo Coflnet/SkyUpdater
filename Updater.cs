@@ -650,13 +650,13 @@ namespace Coflnet.Sky.Updater
 
         private void ProduceIntoTopic(IEnumerable<SaveAuction> auctionsToAdd, string targetTopic, ActivityContext pageSpanContext = default)
         {
-            using (var p = kafkaCreator.BuildProducer<string, SaveAuction>())
-            {
-                ProduceIntoTopic(auctionsToAdd, targetTopic, p, pageSpanContext);
+            using var p = kafkaCreator.BuildProducer<string, SaveAuction>();
+            ProduceIntoTopic(auctionsToAdd, targetTopic, p, pageSpanContext);
 
-                // wait for up to 10 seconds for any inflight messages to be delivered.
-                p.Flush(TimeSpan.FromSeconds(10));
-            }
+            // wait for up to 10 seconds for any inflight messages to be delivered.
+            var lost = p.Flush(TimeSpan.FromSeconds(10));
+            if (lost > 0)
+                dev.Logger.Instance.Error($"Lost {lost} messages on {targetTopic}");
         }
 
         private static void ProduceIntoTopic(
