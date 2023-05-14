@@ -125,9 +125,7 @@ namespace Coflnet.Sky.Updater
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 logger.LogError($"error getting auctions status {response.StatusCode} " + response.Content);
-                if(response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                    await Task.Delay(10000);
-                return new SaveAuction[0];
+                throw new Exception("error getting auctions");
             }
             var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
             return responseDeserialized.Auctions.Select(Updater.ConvertAuction);
