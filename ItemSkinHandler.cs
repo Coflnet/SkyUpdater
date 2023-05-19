@@ -75,11 +75,11 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
                     var url = $"https://sky.coflnet.com/static/icon/{displayTag}";
                     Console.WriteLine($"trying {url} for {tag} {id}");
                     if (displayTag != null)
-                        await itemsApi.ItemItemTagTexturePostAsync(tag, tag, url);
+                        await itemsApi.ItemItemTagTexturePostAsync(tag, url);
                     //skinNames[tag] = false;
                     return;
                 }
-                await itemsApi.ItemItemTagTexturePostAsync(tag, tag, skullUrl);
+                await itemsApi.ItemItemTagTexturePostAsync(tag, skullUrl);
                 Console.WriteLine($"updated skin for {tag} to {skullUrl}");
             }
             catch (Exception e)
