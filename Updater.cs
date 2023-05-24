@@ -74,11 +74,6 @@ namespace Coflnet.Sky.Updater
 
         Prometheus.Counter newAuctions = Prometheus.Metrics.CreateCounter("sky_updater_new_auctions", "Increases every time a new auction is found");
 
-        private static ConcurrentDictionary<string, bool> ActiveAuctions = new ConcurrentDictionary<string, bool>();
-        private static ConcurrentDictionary<string, DateTime> MissingSince = new ConcurrentDictionary<string, DateTime>();
-
-        ConcurrentDictionary<string, int> AuctionCount;
-        public static ConcurrentDictionary<string, int> LastAuctionCount;
         public static ActivitySource activitySource;
         public KafkaCreator kafkaCreator;
 
@@ -171,7 +166,6 @@ namespace Coflnet.Sky.Updater
             var binupdate = BinUpdater.GrabAuctions(apiClient).ConfigureAwait(false);
 
             var cancelToken = new CancellationToken();
-            AuctionCount = new ConcurrentDictionary<string, int>();
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
             Console.WriteLine("loading total pages " + max);
@@ -267,16 +261,6 @@ namespace Coflnet.Sky.Updater
                 p.Flush(TimeSpan.FromSeconds(10));
             }
 
-            if (AuctionCount.Count > 2)
-                LastAuctionCount = AuctionCount;
-
-            //BinUpdateSold(currentUpdateBins);
-            var lastUuids = ActiveAuctions;
-            ActiveAuctions = activeUuids;
-            var canceledTask = Task.Run(() =>
-            {
-                RemoveCanceled(lastUuids);
-            }).ConfigureAwait(false);
             AddSoldAuctions(await binupdate, null);
 
             Console.WriteLine($"Updated {sum} auctions {doneCont} pages");
@@ -372,50 +356,6 @@ namespace Coflnet.Sky.Updater
             return new DateTimeOffset(time.ToUniversalTime()).ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'", CultureInfo.InvariantCulture);
         }
 
-        /// <summary>
-        /// Takes care of removing canceled auctions
-        /// Will check 5 updates to make sure there wasn't just a page missing
-        /// </summary>
-        /// <param name="lastUuids"></param>
-        private void RemoveCanceled(ConcurrentDictionary<string, bool> lastUuids)
-        {
-            foreach (var item in ActiveAuctions.Keys)
-            {
-                lastUuids.TryRemove(item, out bool val);
-                MissingSince.TryRemove(item, out DateTime value);
-            }
-
-            foreach (var item in BinUpdater.SoldLastMin)
-            {
-                lastUuids.TryRemove(item.Uuid, out bool val);
-            }
-
-            foreach (var item in lastUuids)
-            {
-                MissingSince[item.Key] = DateTime.Now;
-                // its less important if items are removed from the flipper than globally
-                // the flipper should not display inactive auctions at all
-                // TODO update this
-                //Flipper.FlipperEngine.Instance.AuctionInactive(item.Key);
-            }
-            var removed = new HashSet<string>();
-            foreach (var item in MissingSince)
-            {
-                if (item.Value < DateTime.Now - TimeSpan.FromMinutes(5))
-                    removed.Add(item.Key);
-            }
-            ProduceIntoTopic(removed.Select(uuid => new SaveAuction()
-            {
-                Uuid = uuid,
-                UId = AuctionService.Instance.GetId(uuid),
-                End = DateTime.Now
-            }), MissingAuctionsTopic);
-            foreach (var item in removed)
-            {
-                MissingSince.TryRemove(item, out DateTime since);
-            }
-            Console.WriteLine($"Canceled last min: {removed.Count} {removed.FirstOrDefault()}");
-        }
 
         internal void UpdateForEver()
         {
@@ -519,19 +459,6 @@ namespace Coflnet.Sky.Updater
             //AddToFlipperCheckQueue(started.Where(a => a.Start > min));
             newAuctions.Inc(started.Count());
             ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids.Max(b => b.Timestamp) > lastUpdate), NewBidsTopic, p, pageSpanContext);
-
-            if (DateTime.Now.Minute % 30 == 7)
-                foreach (var a in res.Auctions)
-                {
-                    var auction = ConvertAuction(a);
-                    AuctionCount.AddOrUpdate(auction.Tag, k =>
-                    {
-                        return DetermineWorth(0, auction);
-                    }, (k, c) =>
-                    {
-                        return DetermineWorth(c, auction);
-                    });
-                }
 
             var ended = res.Auctions.Where(a => a.End < DateTime.Now).Select(ConvertAuction);
             ProduceIntoTopic(ended, AuctionEndedTopic, p, pageSpanContext);
