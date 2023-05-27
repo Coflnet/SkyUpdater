@@ -28,7 +28,7 @@ namespace Coflnet.Sky.Updater
     {
         private const string LAST_UPDATE_KEY = "lastUpdate";
         private const int REQUEST_BACKOF_DELAY = 200;
-        private static int MillisecondsDelay = Int32.Parse(SimplerConfig.Config.Instance["SLOWDOWN_MS"] ?? "0");
+        protected static int MillisecondsDelay = Int32.Parse(SimplerConfig.Config.Instance["SLOWDOWN_MS"] ?? "0");
         private string apiKey;
         private HypixelApi apiClient;
         private bool abort;
