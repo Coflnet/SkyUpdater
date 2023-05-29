@@ -105,7 +105,7 @@ namespace Coflnet.Sky.Updater
         {
             foreach (var item in auctions)
             {
-                if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(1))
+                if (item.Start > DateTime.UtcNow - TimeSpan.FromSeconds(20))
                     Console.WriteLine("found new auction " + item.Uuid);
                 if (addTag.Key != null)
                     item.Context[addTag.Key] = addTag.Value;
