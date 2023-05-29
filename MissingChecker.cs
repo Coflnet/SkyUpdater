@@ -12,6 +12,7 @@ using Newtonsoft.Json;
 using RestSharp;
 using Microsoft.Extensions.Logging;
 using Coflnet.Kafka;
+using Prometheus;
 
 namespace Coflnet.Sky.Updater
 {
@@ -25,6 +26,7 @@ namespace Coflnet.Sky.Updater
         private ILogger<MissingChecker> logger;
         private KafkaCreator kafkaCreator;
         static RestClient skyblockClient = new RestClient("https://api.hypixel.net/skyblock/");
+        static Counter gracePeriodFind = Metrics.CreateCounter("sky_updater_grace_period_find", "auctions found in grace period");
 
 
         public MissingChecker(IConfiguration config, ILogger<MissingChecker> logger, KafkaCreator kafkaCreator)
@@ -106,7 +108,10 @@ namespace Coflnet.Sky.Updater
             foreach (var item in auctions)
             {
                 if (item.Start > DateTime.UtcNow - TimeSpan.FromSeconds(20))
+                {
+                    gracePeriodFind.Inc();
                     Console.WriteLine("found new auction " + item.Uuid);
+                }
                 if (addTag.Key != null)
                     item.Context[addTag.Key] = addTag.Value;
                 if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(1))
