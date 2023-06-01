@@ -28,7 +28,6 @@ namespace Coflnet.Sky.Updater
         static RestClient skyblockClient = new RestClient("https://api.hypixel.net/skyblock/");
         static Counter gracePeriodFind = Metrics.CreateCounter("sky_updater_grace_period_find", "auctions found in grace period");
 
-
         public MissingChecker(IConfiguration config, ILogger<MissingChecker> logger, KafkaCreator kafkaCreator)
         {
             this.config = config;
