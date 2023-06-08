@@ -14,7 +14,7 @@ namespace Coflnet.Sky.Updater
 {
     public class ItemDetailsExtractor
     {
-        public ConcurrentDictionary<string, Item> Items => ItemDetails.Instance.Items;
+        public ConcurrentDictionary<string, ItemDetails.Item> Items => ItemDetails.Instance.Items;
         private static ConcurrentDictionary<string, DBItem> ToFillDetails = new ConcurrentDictionary<string, DBItem>();
 
         public void LoadToFill()
@@ -87,7 +87,7 @@ namespace Coflnet.Sky.Updater
 
         private void AddNewItem(Auction a, string name, string tag, DBItem existingItem = null)
         {
-            var i = new Item();
+            var i = new ItemDetails.Item();
             i.Id = tag;
             i.AltNames = new HashSet<string>() { name };
             i.Tier = a.Tier;
