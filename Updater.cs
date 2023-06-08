@@ -165,7 +165,7 @@ namespace Coflnet.Sky.Updater
 
             var binupdate = BinUpdater.GrabAuctions(apiClient).ConfigureAwait(false);
 
-            var cancelToken = new CancellationToken();
+            var cancelToken = new CancellationTokenSource(TimeSpan.FromMinutes(2)).Token;
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
             Console.WriteLine("loading total pages " + max);

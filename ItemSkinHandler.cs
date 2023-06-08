@@ -40,6 +40,7 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
                     skinNames.TryAdd(item.Tag, false);
                 }
                 Console.WriteLine($"found {skinNames.Count} items without skins");
+                items.Clear();
             }
             catch (Exception e)
             {
