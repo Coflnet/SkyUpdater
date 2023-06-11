@@ -4,11 +4,6 @@ using System.Text.Json.Serialization;
 
 namespace Coflnet.Sky.Updater.Models
 {
-    /*[JsonSerializable(typeof(GetAuctionPage))]
-    internal partial class MyJsonContext : JsonSerializerContext
-    {
-    }*/
-
     public class AuctionPage
     {
         [JsonPropertyName("success")]
