@@ -134,7 +134,7 @@ namespace Coflnet.Sky.Updater
 
         async Task<DateTime> RunUpdate(DateTime updateStartTime)
         {
-            using var updateScope = activitySource.CreateActivity("RunUpdate", ActivityKind.Server)?.Start();
+            using var updateScope = activitySource?.CreateActivity("RunUpdate", ActivityKind.Server)?.Start();
             int max = 1;
             var lastUpdate = lastUpdateDone;
 
