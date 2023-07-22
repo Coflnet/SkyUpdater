@@ -177,86 +177,19 @@ namespace Coflnet.Sky.Updater
                 {
                     var index = loopIndexNotUse;
                     await Task.Delay(MillisecondsDelay);
-                    tasks.Add(taskFactory.StartNew(async () =>
-                    {
-                        var tracer = activitySource;
-                        using var scope = tracer.StartActivity("LoadPage")?.SetTag("page", index).Start();
-                        try
-                        {
-                            var page = index;
-
-                            if (updaterIndex == 1)
-                                page = max - index - 1;
-                            if (updaterIndex == 2)
-                                page = (index + 40) % max;
-
-                            AuctionPage res;
-                            using (var libLoadScope = tracer.StartActivity("LoadPage")?.AddTag("page", index).Start())
-                            {
-                                res = index != 0 ? await LoadPage(page, lastUpdate).ConfigureAwait(false) : firstPage;
-                            }
-                            while (res == null)
-                            {
-                                // tripple the backoff because these will be more
-                                await Task.Delay(REQUEST_BACKOF_DELAY * 3);
-                                using (var libLoadScope = tracer.StartActivity("LoadPage")?.AddTag("page", index).Start())
-                                {
-                                    res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
-                                }
-                            }
-                            if (res == null)
-                                return;
-
-                            max = (int)res.TotalPages;
-
-                            if (index == 0)
-                            {
-                                lastHypixelCache = res.LastUpdated;
-                                LastPull = res.LastUpdated;
-                                // correct update time
-                                Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
-                            }
-
-                            var val = await Save(res, lastUpdate, sumary, p, scope?.Context ?? default);
-                            scope?.SetTag("lastUpdated", res.LastUpdated.ToString());
-                            if (res.LastUpdated == updateStartTime)
-                                scope?.SetTag("notUpdated", true);
-                            lock (sumloc)
-                            {
-                                sum += val;
-                                // process done
-                                doneCont++;
-                            }
-                            PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
-                        }
-                        catch (Exception e)
-                        {
-                            scope?.SetTag("error", true);
-                            try // again
-                            {
-                                var res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
-                                var val = await Save(res, lastUpdate, sumary, p, scope?.Context ?? default);
-                            }
-                            catch (System.Exception)
-                            {
-                                Logger.Instance.Error($"Single page ({index}) could not be loaded twice because of {e.Message} {e.StackTrace} {e.InnerException?.Message}");
-                            }
-                        }
-
-                    }, cancelToken).Unwrap().ConfigureAwait(false));
-                    PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
-
-                    // try to stay under 600MB
-                    if (System.GC.GetTotalMemory(false) > 500000000)
-                    {
-                        Console.Write("\t mem: " + System.GC.GetTotalMemory(false));
-                        System.GC.Collect();
-                    }
+                    UpdateOnePage(updateStartTime, ref max, lastUpdate, ref lastHypixelCache, tasks, ref sum, ref doneCont, sumloc, page, firstPage, sumary, p, index, cancelToken);
                     //await Task.Delay(100);
                 }
 
                 foreach (var item in tasks)
-                    await item;
+                    try
+                    {
+                        await item;
+                    }
+                    catch (System.Exception e)
+                    {
+                        Logger.Instance.Error(e, $"failed to load page");
+                    }
 
                 p.Flush(TimeSpan.FromSeconds(10));
             }
@@ -265,7 +198,95 @@ namespace Coflnet.Sky.Updater
 
             Console.WriteLine($"Updated {sum} auctions {doneCont} pages");
             UpdateSize = sum;
+            ProduceSummary(sumary);
 
+            doFullUpdate = false;
+            OnNewUpdateEnd?.Invoke();
+
+            return lastHypixelCache;
+        }
+
+        private void UpdateOnePage(DateTime updateStartTime, ref int max, DateTime lastUpdate, ref DateTime lastHypixelCache, List<ConfiguredTaskAwaitable> tasks, ref int sum, ref int doneCont, object sumloc, int page, AuctionPage firstPage, AhStateSumary sumary, IProducer<string, SaveAuction> p, int index, CancellationToken cancelToken)
+        {
+            tasks.Add(taskFactory.StartNew(async () =>
+            {
+                var tracer = activitySource;
+                using var scope = tracer.StartActivity("LoadPage")?.SetTag("page", index).Start();
+                try
+                {
+                    var page = index;
+
+                    if (updaterIndex == 1)
+                        page = max - index - 1;
+                    if (updaterIndex == 2)
+                        page = (index + 40) % max;
+
+                    AuctionPage res;
+                    using (var libLoadScope = tracer.StartActivity("LoadPage")?.AddTag("page", index).Start())
+                    {
+                        res = index != 0 ? await LoadPage(page, lastUpdate).ConfigureAwait(false) : firstPage;
+                    }
+                    while (res == null)
+                    {
+                        // tripple the backoff because these will be more
+                        await Task.Delay(REQUEST_BACKOF_DELAY * 3);
+                        using (var libLoadScope = tracer.StartActivity("LoadPage")?.AddTag("page", index).Start())
+                        {
+                            res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
+                        }
+                    }
+                    if (res == null)
+                        return;
+
+                    max = (int)res.TotalPages;
+
+                    if (index == 0)
+                    {
+                        lastHypixelCache = res.LastUpdated;
+                        LastPull = res.LastUpdated;
+                        // correct update time
+                        Console.WriteLine($"Updating difference {lastUpdate} {res.LastUpdated}\n");
+                    }
+
+                    var val = await Save(res, lastUpdate, sumary, p, scope?.Context ?? default);
+                    scope?.SetTag("lastUpdated", res.LastUpdated.ToString());
+                    if (res.LastUpdated == updateStartTime)
+                        scope?.SetTag("notUpdated", true);
+                    lock (sumloc)
+                    {
+                        sum += val;
+                        // process done
+                        doneCont++;
+                    }
+                    PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
+                }
+                catch (Exception e)
+                {
+                    scope?.SetTag("error", true);
+                    try // again
+                    {
+                        var res = await LoadPage(page, lastUpdate).ConfigureAwait(false);
+                        var val = await Save(res, lastUpdate, sumary, p, scope?.Context ?? default);
+                    }
+                    catch (System.Exception)
+                    {
+                        Logger.Instance.Error($"Single page ({index}) could not be loaded twice because of {e.Message} {e.StackTrace} {e.InnerException?.Message}");
+                    }
+                }
+
+            }, cancelToken).Unwrap().ConfigureAwait(false));
+            PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
+
+            // try to stay under 600MB
+            if (System.GC.GetTotalMemory(false) > 500000000)
+            {
+                Console.Write("\t mem: " + System.GC.GetTotalMemory(false));
+                System.GC.Collect();
+            }
+        }
+
+        private void ProduceSummary(AhStateSumary sumary)
+        {
             if (updaterIndex <= 1)
                 using (var p = GetSumaryProducer())
                 {
@@ -283,11 +304,6 @@ namespace Coflnet.Sky.Updater
                 }
             else
                 Console.WriteLine("skiping sumary");
-
-            doFullUpdate = false;
-            OnNewUpdateEnd?.Invoke();
-
-            return lastHypixelCache;
         }
 
         private static AhStateSumary CreateSumaryPart(AhStateSumary sumary, IEnumerable<KeyValuePair<long, long>> p1, int part, int partCount)
