@@ -121,7 +121,8 @@ public class MissingChecker : BackgroundService
 
     public async Task<IEnumerable<SaveAuction>> GetAuctionOfPlayer(string playerId, string apiKey)
     {
-        var request = new RestRequest($"auction?key={apiKey}&player={playerId}", Method.Get);
+        var request = new RestRequest($"auction?player={playerId}", Method.Get);
+        request.AddHeader("API-Key", apiKey);
 
         //Get the response and Deserialize
         var response = await skyblockClient.ExecuteAsync(request).ConfigureAwait(false);
