@@ -128,7 +128,7 @@ public class MissingChecker : BackgroundService
         if (response.StatusCode != System.Net.HttpStatusCode.OK)
         {
             logger.LogError($"error getting auctions status {response.StatusCode} " + response.Content);
-            throw new Exception($"error getting auctions from {playerId}");
+            throw new Exception($"error getting auctions from {playerId}-{response.StatusCode}");
         }
         var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
         return responseDeserialized.Auctions.Select(Updater.ConvertAuction);
