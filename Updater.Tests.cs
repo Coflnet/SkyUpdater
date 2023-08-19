@@ -149,6 +149,11 @@ namespace Coflnet.Sky.Updater.Tests
             {
                 throw new NotImplementedException();
             }
+
+            public void SetSaslCredentials(string username, string password)
+            {
+                throw new NotImplementedException();
+            }
         }
     }
 }
