@@ -292,7 +292,7 @@ namespace Coflnet.Sky.Updater
                     Console.WriteLine("actual: " + MessagePack.MessagePackSerializer.Serialize(s2).Length);
                     ProduceSumary(s1, p);
                     ProduceSumary(s2, p);
-                    p.Flush(TimeSpan.FromSeconds(10));
+                    p.Flush(TimeSpan.FromSeconds(120));
                 }
             else
                 Console.WriteLine("skiping sumary");
