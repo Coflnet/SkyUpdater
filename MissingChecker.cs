@@ -105,7 +105,7 @@ public class MissingChecker : BackgroundService
     {
         foreach (var item in auctions)
         {
-            if (item.Start > DateTime.UtcNow - TimeSpan.FromSeconds(20))
+            if (item.Start > DateTime.UtcNow - TimeSpan.FromSeconds(18))
             {
                 gracePeriodFind.Inc();
                 Console.WriteLine("found new auction " + item.Uuid);
