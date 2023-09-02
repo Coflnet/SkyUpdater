@@ -101,11 +101,6 @@ public class BazaarUpdater
         }).ConfigureAwait(false); ;
     }
 
-    private static ProducerConfig producerConfig = new ProducerConfig
-    {
-        BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-        LingerMs = 0
-    };
     private KafkaCreator kafkaCreator;
 
     public BazaarUpdater(KafkaCreator kafkaCreator)

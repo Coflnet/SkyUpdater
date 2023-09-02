@@ -572,12 +572,6 @@ namespace Coflnet.Sky.Updater
             }
         }
 
-        private static ProducerConfig producerConfig = new ProducerConfig
-        {
-            BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 10,
-        };
-
         public virtual void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, Activity span)
         {
             ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic);

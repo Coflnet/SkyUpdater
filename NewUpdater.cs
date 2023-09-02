@@ -20,12 +20,6 @@ namespace Coflnet.Sky.Updater
     {
         private const int REQUEST_BACKOF_DELAY = 60;
         protected virtual string ApiBaseUrl => "https://api.hypixel.net";
-        private static ProducerConfig producerConfig = new ProducerConfig
-        {
-            BootstrapServers = SimplerConfig.Config.Instance["KAFKA_HOST"],
-            LingerMs = 10,
-            LogConnectionClose = false
-        };
         private static HttpClient httpClient = new HttpClient();
         private ActivitySource activitySource;
         private KafkaCreator kafkaCreator;
