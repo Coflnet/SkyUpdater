@@ -110,6 +110,7 @@ namespace Coflnet.Sky.Updater
             {
                 p.Produce(Updater.SoldAuctionsTopic, new Message<string, SaveAuction> { Key = item.Uuid, Value = item });
             }
+            p.Flush(TimeSpan.FromSeconds(30));
         }
 
         protected virtual IProducer<string, SaveAuction> GetProducer()
