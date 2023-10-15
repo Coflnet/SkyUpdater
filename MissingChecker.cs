@@ -105,17 +105,18 @@ public class MissingChecker : BackgroundService
     {
         foreach (var item in auctions)
         {
-            if (item.Start > DateTime.UtcNow - TimeSpan.FromSeconds(18))
-            {
-                gracePeriodFind.Inc();
-                Console.WriteLine("found new auction " + item.Uuid);
-            }
             if (addTag.Key != null)
                 item.Context[addTag.Key] = addTag.Value;
             if (item.Start > DateTime.UtcNow - TimeSpan.FromMinutes(1))
                 Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, item, null);
             else if (item.End < DateTime.UtcNow && item.End > DateTime.UtcNow - TimeSpan.FromMinutes(200) && item.HighestBidAmount > 0)
                 Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, p, item, null);
+            
+            if (item.Start > DateTime.UtcNow - TimeSpan.FromSeconds(18))
+            {
+                gracePeriodFind.Inc();
+                Console.WriteLine($"found new auction {item.Uuid} based on {addTag.Value}");
+            }
         }
     }
 
