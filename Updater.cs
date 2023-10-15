@@ -94,12 +94,14 @@ namespace Coflnet.Sky.Updater
         /// <summary>
         /// Downloads all auctions and save the ones that changed since the last update
         /// </summary>
-        public async Task<DateTime> Update(bool updateAll = false)
+        public async Task<DateTime> Update(bool updateAll = false, CancellationToken token = default)
         {
             doFullUpdate = updateAll;
             if (!minimumOutput)
                 Console.WriteLine($"Usage bevore update {System.GC.GetTotalMemory(false)}");
             var updateStartTime = DateTime.UtcNow.ToLocalTime();
+            if(updateAll)
+                lastUpdateDone = default(DateTime);
 
             try
             {
@@ -115,7 +117,7 @@ namespace Coflnet.Sky.Updater
 
                 if (lastUpdateDone == default(DateTime))
                     lastUpdateDone = new DateTime(2021, 1, 9, 20, 0, 0);
-                lastUpdateDone = await RunUpdate(lastUpdateDone);
+                lastUpdateDone = await RunUpdate(lastUpdateDone, token);
                 await CacheService.Instance.SaveInRedis(LAST_UPDATE_KEY, lastUpdateDone);
             }
             catch (Exception e)
@@ -129,7 +131,7 @@ namespace Coflnet.Sky.Updater
 
         public static DateTime lastUpdateDone = default(DateTime);
 
-        async Task<DateTime> RunUpdate(DateTime updateStartTime)
+        async Task<DateTime> RunUpdate(DateTime updateStartTime, CancellationToken token)
         {
             using var updateScope = activitySource?.CreateActivity("RunUpdate", ActivityKind.Server)?.Start();
             int max = 1;
@@ -163,6 +165,7 @@ namespace Coflnet.Sky.Updater
             var binupdate = BinUpdater.GrabAuctions(apiClient).ConfigureAwait(false);
 
             var cancelToken = new CancellationTokenSource(TimeSpan.FromMinutes(2)).Token;
+            cancelToken = CancellationTokenSource.CreateLinkedTokenSource(cancelToken, token).Token;
 
             var activeUuids = new ConcurrentDictionary<string, bool>();
             Console.WriteLine("loading total pages " + max);
@@ -404,7 +407,7 @@ namespace Coflnet.Sky.Updater
                         var start = DateTime.Now;
                         // do a full update 6 min after start
                         var shouldDoFullUpdate = DateTime.Now.Subtract(TimeSpan.FromMinutes(6)).RoundDown(TimeSpan.FromMinutes(1)) == updaterStart;
-                        var lastCache = await Update(shouldDoFullUpdate);
+                        var lastCache = await Update(shouldDoFullUpdate, token);
                         if (abort || token.IsCancellationRequested)
                         {
                             Console.WriteLine("Stopped updater");
