@@ -358,7 +358,7 @@ namespace Coflnet.Sky.Updater
             {
                 Console.WriteLine("could not parse " + response.Content);
                 Console.WriteLine("status " + response.StatusCode);
-                throw e;
+                throw new Exception("failed to deserialize", e);
             }
         }
 
