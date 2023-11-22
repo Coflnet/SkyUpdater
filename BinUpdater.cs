@@ -44,7 +44,7 @@ namespace Coflnet.Sky.Updater
         public static async Task<List<SaveAuction>> DownloadSells(string BaseUrl)
         {
             var client = new RestClient(BaseUrl);
-            var request = new RestRequest($"skyblock/auctions_ended", Method.Get);
+            var request = new RestRequest($"/v2/skyblock/auctions_ended", Method.Get);
 
             //Get the response and Deserialize
             var response = await client.ExecuteAsync(request).ConfigureAwait(false);
