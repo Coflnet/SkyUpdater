@@ -486,16 +486,6 @@ namespace Coflnet.Sky.Updater
                 await Task.Delay(6000);
                 foreach (var a in res.Auctions)
                 {
-                    // updater can't write to db so no need to tell the extractor
-                    /*try
-                    {
-                        extractor.AddOrIgnoreDetails(a);
-                    }
-                    catch (Exception e)
-                    {
-                        if (errorCount++ < 5)
-                            Logger.Instance.Error(e, $"extracting details");
-                    } */
                     count++;
                     var auction = ConvertAuction(a);
                     sumary.ActiveAuctions[auction.UId] = auction.End.Ticks;
