@@ -13,6 +13,7 @@ using Newtonsoft.Json;
 using RestSharp;
 using System.Diagnostics;
 using Coflnet.Kafka;
+using dev;
 
 namespace Coflnet.Sky.Updater
 {
@@ -212,7 +213,14 @@ namespace Coflnet.Sky.Updater
                         if (auction.Start < lastUpdate)
                             continue;
                         using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();
-                        FoundNew(pageId, p, page, tryCount, auction, prodSpan);
+                        try
+                        {
+                            FoundNew(pageId, p, page, tryCount, auction, prodSpan);
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.Instance.Error(e, "Handing new auction");
+                        }
                         if (count == 0)
                         {
                             var updatedAt = s.Headers.Where(h => h.Key.ToLower() == "date").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
@@ -264,7 +272,7 @@ namespace Coflnet.Sky.Updater
 
         private static void LogHeaderName(Activity siteSpan, HttpResponseMessage s, string headerName)
         {
-            siteSpan?.AddEvent(new("log", default, new(new Dictionary<string, object>() { { 
+            siteSpan?.AddEvent(new("log", default, new(new Dictionary<string, object>() { {
                 "message", $"{headerName}: " + s.Headers.Where(h => h.Key.ToLower() == headerName).Select(h => h.Value).FirstOrDefault()?.FirstOrDefault()}
                 })));
         }
