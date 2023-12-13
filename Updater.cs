@@ -105,20 +105,9 @@ namespace Coflnet.Sky.Updater
 
             try
             {
-                try
-                {
-                    if (lastUpdateDone == default(DateTime))
-                        lastUpdateDone = await CacheService.Instance.GetFromRedis<DateTime>(LAST_UPDATE_KEY);
-                }
-                catch (Exception e)
-                {
-                    Logger.Instance.Error(e, $"load ");
-                }
-
                 if (lastUpdateDone == default(DateTime))
                     lastUpdateDone = new DateTime(2021, 1, 9, 20, 0, 0);
                 lastUpdateDone = await RunUpdate(lastUpdateDone, token);
-                await CacheService.Instance.SaveInRedis(LAST_UPDATE_KEY, lastUpdateDone);
             }
             catch (Exception e)
             {
@@ -444,7 +433,7 @@ namespace Coflnet.Sky.Updater
                 Console.Write($"\r Loading: ({i}/{max}) Done With: {doneCont} Total:{sum} {timeEst:mm\\:ss}");
         }
 
-        async Task<int> Save(AuctionPage res, DateTime lastUpdate, AhStateSumary sumary, IProducer<string, SaveAuction> p, ActivityContext pageSpanContext)
+        protected virtual async Task<int> Save(AuctionPage res, DateTime lastUpdate, AhStateSumary sumary, IProducer<string, SaveAuction> prod, ActivityContext pageSpanContext)
         {
             List<SaveAuction> processed = new List<SaveAuction>();
             using (var span = activitySource.CreateActivity("parsePage", ActivityKind.Server, pageSpanContext)?.Start())
@@ -460,7 +449,7 @@ namespace Coflnet.Sky.Updater
                         var auction = ConvertAuction(a, res.LastUpdated);
                         skinHandler.StoreIfNeeded(auction, a);
                         if (auction.Start > lastUpdate)
-                            ProduceIntoTopic(new SaveAuction[] { auction }, NewAuctionsTopic, p, pageSpanContext);
+                            ProduceIntoTopic(new SaveAuction[] { auction }, NewAuctionsTopic, prod, pageSpanContext);
                         return auction;
                     }).ToList();
             }
@@ -469,10 +458,10 @@ namespace Coflnet.Sky.Updater
             var min = DateTime.Now - TimeSpan.FromMinutes(15);
             //AddToFlipperCheckQueue(started.Where(a => a.Start > min));
             newAuctions.Inc(started.Count());
-            ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids.Max(b => b.Timestamp) > lastUpdate), NewBidsTopic, p, pageSpanContext);
+            ProduceIntoTopic(processed.Where(item => item.Bids.Count > 0 && item.Bids.Max(b => b.Timestamp) > lastUpdate), NewBidsTopic, prod, pageSpanContext);
 
             var ended = res.Auctions.Where(a => a.End < DateTime.Now).Select(ConvertAuction);
-            ProduceIntoTopic(ended, AuctionEndedTopic, p, pageSpanContext);
+            ProduceIntoTopic(ended, AuctionEndedTopic, prod, pageSpanContext);
 
             var count = await UpdateSumary(res, sumary);
             return count;
