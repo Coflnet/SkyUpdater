@@ -22,9 +22,10 @@ public class ItemSkinHandler : BackgroundService, IItemSkinHandler
     private ConcurrentDictionary<string, bool> skinNames = new();
     private ActivitySource activitySource;
 
-    public ItemSkinHandler(IItemsApi itemsApi)
+    public ItemSkinHandler(IItemsApi itemsApi, ActivitySource activitySource)
     {
         this.itemsApi = itemsApi;
+        this.activitySource = activitySource;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
