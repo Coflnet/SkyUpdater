@@ -132,7 +132,6 @@ namespace Coflnet.Sky.Updater
             var longestWithoutSkyblock = SearchFor(fullName.Substring(RemoveReforgesAndEnchanted(a.ItemName).Length));
             var withFullName = SearchFor(fullName);
 
-            
             if(withFullName == null || longestWithoutSkyblock != null && longestWithoutSkyblock.Length > withFullName.Length)
             {
                 if(longestWithoutSkyblock == null)
