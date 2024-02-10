@@ -14,6 +14,7 @@ using RestSharp;
 using System.Diagnostics;
 using Coflnet.Kafka;
 using dev;
+using Prometheus;
 
 namespace Coflnet.Sky.Updater
 {
@@ -24,6 +25,9 @@ namespace Coflnet.Sky.Updater
         private static HttpClient httpClient = new HttpClient();
         private ActivitySource activitySource;
         private KafkaCreator kafkaCreator;
+        private readonly Gauge firstByteTime = Metrics.CreateGauge("sky_update_first_byte", "Time till first byte");
+        private readonly Gauge firstParsed = Metrics.CreateGauge("sky_update_first_parsed", "Time till first parsed auction");
+        private readonly Gauge pageOneDone = Metrics.CreateGauge("sky_update_page_one_done", "Time till first page done");
 
         public NewUpdater(ActivitySource activitySource, KafkaCreator kafkaCreator)
         {
@@ -208,6 +212,7 @@ namespace Coflnet.Sky.Updater
                     }
                     overallUpdateCancle.Cancel();
                     reader.Read();
+                    var pagUpdatedAt = page.LastUpdated;
                     await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")).ConfigureAwait(false))
                     {
                         if (auction.Start < lastUpdate)
@@ -230,12 +235,15 @@ namespace Coflnet.Sky.Updater
                             // last "auction found" start
                             Updater.LastPullComplete = intermediate;
                             Updater.LastPull = (page._lastUpdated / 1000).ThisIsNowATimeStamp();
+                            firstByteTime.Set((downloadStart - pagUpdatedAt).TotalSeconds);
+                            firstParsed.Set((intermediate - pagUpdatedAt).TotalSeconds);
                             Console.WriteLine($"dls:{downloadStart.Second}.{downloadStart.Millisecond} \tparse:{intermediate.Second}.{intermediate.Millisecond} \tnow: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  \n{updatedAt} {tage}{(DateTime.Now - start)}");
                         }
                         uuid = auction.Uuid;
 
                         count++;
                     }
+                    pageOneDone.Set((DateTime.UtcNow - pagUpdatedAt).TotalSeconds);
                     Console.WriteLine($"done: {DateTime.Now.Second}.{DateTime.Now.Millisecond.ToString("000")}");
                 }
                 LogHeaderName(siteSpan, s, "age");
