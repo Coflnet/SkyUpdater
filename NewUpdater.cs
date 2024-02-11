@@ -50,11 +50,11 @@ namespace Coflnet.Sky.Updater
                     var page = 0;
                     try
                     {
-                        var waitTime = lastUpdate + TimeSpan.FromSeconds(62.8) - DateTime.Now;
+                        var waitTime = lastUpdate + TimeSpan.FromSeconds(65.8) - DateTime.Now;
                         if (waitTime < TimeSpan.FromSeconds(0))
                             waitTime = TimeSpan.FromSeconds(0);
                         await Task.Delay(waitTime);
-                        using var siteSpan = activitySource.CreateActivity("FastUpdate", ActivityKind.Server)?.AddTag("page", page)?.Start();
+                        using var siteSpan = activitySource.CreateActivity("PageUpdate", ActivityKind.Server)?.AddTag("page", page)?.Start();
                         DateTime time = await DoOneUpdate(lastUpdate, p, page, siteSpan);
                         //var time = await GetAndSavePage(page, p, lastUpdate, siteSpan);
                         if (page < 20)
