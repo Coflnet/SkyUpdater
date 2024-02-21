@@ -167,7 +167,7 @@ namespace Coflnet.Sky.Updater
                 {
                     if (tryCount++ % 20 == 1)
                         Console.WriteLine($" - 20x not changed {pageId} {s.StatusCode}");
-                    await Task.Delay(25);
+                    await Task.Delay(10);
                     continue;
                 }
                 if (s.StatusCode != System.Net.HttpStatusCode.OK)
