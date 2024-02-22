@@ -50,7 +50,7 @@ namespace Coflnet.Sky.Updater
                     var page = 0;
                     try
                     {
-                        var waitTime = lastUpdate + TimeSpan.FromSeconds(65.8) - DateTime.Now;
+                        var waitTime = lastUpdate + TimeSpan.FromSeconds(66.6) - DateTime.Now;
                         if (waitTime < TimeSpan.FromSeconds(0))
                             waitTime = TimeSpan.FromSeconds(0);
                         await Task.Delay(waitTime);
@@ -167,7 +167,7 @@ namespace Coflnet.Sky.Updater
                 {
                     if (tryCount++ % 20 == 1)
                         Console.WriteLine($" - 20x not changed {pageId} {s.StatusCode}");
-                    await Task.Delay(10);
+                    await Task.Delay(5);
                     continue;
                 }
                 if (s.StatusCode != System.Net.HttpStatusCode.OK)
