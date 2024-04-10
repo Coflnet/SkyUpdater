@@ -112,7 +112,7 @@ namespace Coflnet.Sky.Updater
             catch (Exception e)
             {
                 Logger.Instance.Error($"Updating stopped because of {e.Message} {e.StackTrace}  {e.InnerException?.Message} {e.InnerException?.StackTrace}");
-                throw e;
+                throw;
             }
 
             return lastUpdateDone;
