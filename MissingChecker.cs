@@ -111,7 +111,9 @@ public class MissingChecker : BackgroundService
                 Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, item, null);
             else if (item.End < DateTime.UtcNow && item.End > DateTime.UtcNow - TimeSpan.FromMinutes(200) && item.HighestBidAmount > 0)
                 Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, p, item, null);
-            
+            if (item.Bids.Any(b => b.Timestamp > DateTime.UtcNow - TimeSpan.FromMinutes(1)))
+                Updater.ProduceIntoTopic(Updater.NewBidsTopic, p, item, null);
+
             if (item.Start > DateTime.UtcNow - TimeSpan.FromSeconds(18))
             {
                 gracePeriodFind.Inc();
