@@ -21,22 +21,9 @@ namespace Coflnet.Sky.Updater
 
         static MinecraftTypeParser()
         {
-            Instance = new MinecraftTypeParser();
-            FileController.dataPaht = "data";
-            if(FileController.Exists("minecraftTypes"))
-            {
-                LoadFromDisc();
-            } else {
                 DownloadItems();
-            }
         }
 
-        static void LoadFromDisc()
-        {
-            Items = FileController.LoadAs<Dictionary<string,Item>>("minecraftItems");
-            
-            BuildTypeCache();
-        }
 
         static void BuildTypeCache()
         {
@@ -97,8 +84,6 @@ namespace Coflnet.Sky.Updater
                     Items.Add(item.name,item);
                 IdToName.TryAdd(item.type, item.text_type.ToUpper());
             }
-
-            FileController.SaveAs("minecraftItems",Items);
       
             BuildTypeCache();
         }

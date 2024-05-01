@@ -15,7 +15,7 @@ namespace Coflnet.Sky.Updater.Tests
         [Test]
         public void TimeFormat()
         {
-            Assert.AreEqual("Thu, 20 Jan 2022 20:00:00 GMT", Updater.FormatTime(new System.DateTime(2022, 1, 20, 20, 0, 0, System.DateTimeKind.Utc)));
+            Assert.That("Thu, 20 Jan 2022 20:00:00 GMT", Is.EqualTo(Updater.FormatTime(new System.DateTime(2022, 1, 20, 20, 0, 0, System.DateTimeKind.Utc))));
         }
 
 
@@ -35,8 +35,8 @@ namespace Coflnet.Sky.Updater.Tests
             await update.DoAnUpdate();
 
             var elapsed = sw.ElapsedMilliseconds;
-            Assert.LessOrEqual(elapsed, 50);
-            Assert.NotNull(update.producer.lastAuction);
+            Assert.That(elapsed, Is.LessThanOrEqualTo(50));
+            Assert.That(update.producer.lastAuction, Is.Not.Null);
             try 
             {
             await host.StopAsync();

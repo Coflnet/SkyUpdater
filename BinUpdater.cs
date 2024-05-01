@@ -7,7 +7,6 @@ using Coflnet.Sky.Core;
 using Hypixel.NET;
 using Hypixel.NET.SkyblockApi;
 using Newtonsoft.Json;
-using OpenTracing.Util;
 using RestSharp;
 
 namespace Coflnet.Sky.Updater

@@ -8,6 +8,7 @@ using Coflnet.Sky.Updater.Models;
 using Coflnet.Sky.Core;
 using System.Diagnostics;
 using fNbt;
+using fNbt.Tags;
 
 namespace Coflnet.Sky.Updater;
 

@@ -579,7 +579,6 @@ namespace Coflnet.Sky.Updater
             foreach (var item in auctionsToAdd)
             {
                 var span = activitySource.CreateActivity("Produce", ActivityKind.Server)?.AddTag("topic", targetTopic)?.Start();
-                item.TraceContext = new Tracing.TextMap();
                 ProduceIntoTopic(targetTopic, p, item, span);
             }
         }
