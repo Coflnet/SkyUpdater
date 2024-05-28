@@ -40,7 +40,7 @@ public class MissingChecker : BackgroundService
         if (keys == null || keys.Length <= Updater.updaterIndex)
             return; // no key for this instance
         apiKey = keys[Updater.updaterIndex];
-        await Kafka.KafkaConsumer.ConsumeBatch<SaveAuction>(
+        await KafkaConsumer.ConsumeBatch<SaveAuction>(
             config,
             config["TOPICS:AUCTION_CHECK"],
             async auctions =>
