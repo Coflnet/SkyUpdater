@@ -147,7 +147,7 @@ public class MissingChecker : BackgroundService
     public class PlayerAuction : Auction
     {
 
-        [Newtonsoft.Json.JsonProperty("item_bytes")]
+        [JsonProperty("item_bytes")]
         public ItemBytesWithType ItemBytesObj { get; set; }
         [JsonIgnore]
         public override string ItemBytes { get => this.ItemBytesObj.Data; set => base.ItemBytes = value; }
