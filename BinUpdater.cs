@@ -15,14 +15,6 @@ namespace Coflnet.Sky.Updater
     {
         private List<string> apiKeys = new List<string>();
 
-        /// <summary>
-        /// Dictionary of minecraft player ids and how many auctions they had to block pulling their whole history twice
-        /// </summary>
-        /// <typeparam name="string"></typeparam>
-        /// <typeparam name="short"></typeparam>
-        /// <returns></returns>
-        private static ConcurrentDictionary<uint, short> PulledAlready = new ConcurrentDictionary<uint, short>();
-
         public BinUpdater(IEnumerable<string> apiKeys)
         {
             this.apiKeys.AddRange(apiKeys);
