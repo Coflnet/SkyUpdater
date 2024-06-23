@@ -234,14 +234,6 @@ namespace Coflnet.Sky.Updater
 
                     }, cancelToken).Unwrap().ConfigureAwait(false));
                     PrintUpdateEstimate(index, doneCont, sum, updateStartTime, max);
-
-                    // try to stay under 600MB
-                    if (System.GC.GetTotalMemory(false) > 500000000)
-                    {
-                        Console.Write("\t mem: " + System.GC.GetTotalMemory(false));
-                        System.GC.Collect();
-                    }
-                    //await Task.Delay(100);
                 }
 
                 foreach (var item in tasks)
