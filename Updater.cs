@@ -15,6 +15,8 @@ using Hypixel.NET;
 using RestSharp;
 using System.Diagnostics;
 using Coflnet.Kafka;
+using Newtonsoft.Json;
+using MessagePack;
 
 namespace Coflnet.Sky.Updater
 {
@@ -100,7 +102,7 @@ namespace Coflnet.Sky.Updater
             if (!minimumOutput)
                 Console.WriteLine($"Usage bevore update {System.GC.GetTotalMemory(false)}");
             var updateStartTime = DateTime.UtcNow.ToLocalTime();
-            if(updateAll)
+            if (updateAll)
                 lastUpdateDone = default(DateTime);
 
             try
@@ -580,16 +582,24 @@ namespace Coflnet.Sky.Updater
             if (targetTopic == NewAuctionsTopic)
                 timeToFind.Observe((DateTime.Now - item.FindTime).TotalSeconds);
 
-            p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
+            try
             {
-                if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
-                    Console.WriteLine(!r.Error.IsError ?
-                        $"Delivered {r.Topic} {r.Offset} " :
-                        $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
-                if (r.Topic == NewAuctionsTopic)
-                    sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
-                span?.Dispose();
-            });
+                p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
+                {
+                    if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
+                        Console.WriteLine(!r.Error.IsError ?
+                            $"Delivered {r.Topic} {r.Offset} " :
+                            $"\nDelivery Error {r.Topic}: {r.Error.Reason}");
+                    if (r.Topic == NewAuctionsTopic)
+                        sendingTime.Observe((DateTime.Now - r.Message.Value.FindTime).TotalSeconds);
+                    span?.Dispose();
+                });
+            }
+            catch (Exception)
+            {
+                Logger.Instance.Error($"Failed to produce into {targetTopic} {MessagePackSerializer.SerializeToJson(item)}");
+                throw;
+            }
         }
 
         private static int DetermineWorth(int c, SaveAuction auction)
