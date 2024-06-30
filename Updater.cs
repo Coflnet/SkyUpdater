@@ -15,7 +15,6 @@ using Hypixel.NET;
 using RestSharp;
 using System.Diagnostics;
 using Coflnet.Kafka;
-using Newtonsoft.Json;
 using MessagePack;
 
 namespace Coflnet.Sky.Updater
