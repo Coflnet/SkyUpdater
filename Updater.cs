@@ -45,6 +45,7 @@ namespace Coflnet.Sky.Updater
 
         private static bool doFullUpdate = false;
         Prometheus.Counter auctionUpdateCount = Prometheus.Metrics.CreateCounter("sky_updater_auction_update", "How many auctions were updated");
+        Prometheus.Gauge soldCount = Prometheus.Metrics.CreateGauge("sky_updater_sold_count", "How many auctions were sold globally");
 
         static Prometheus.HistogramConfiguration buckets = new Prometheus.HistogramConfiguration()
         {
@@ -547,8 +548,9 @@ namespace Coflnet.Sky.Updater
             }
         }
 
-        public virtual void AddSoldAuctions(IEnumerable<SaveAuction> auctionsToAdd, Activity span)
+        public virtual void AddSoldAuctions(List<SaveAuction> auctionsToAdd, Activity span)
         {
+            soldCount.Set(auctionsToAdd.Count);
             ProduceIntoTopic(auctionsToAdd, SoldAuctionsTopic);
         }
 
