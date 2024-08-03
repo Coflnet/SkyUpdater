@@ -25,7 +25,7 @@ namespace Coflnet.Sky.Updater
 
         public static async Task<List<SaveAuction>> GrabAuctions(HypixelApi hypixelApi)
         {
-            using var span = Updater.activitySource.CreateActivity("SoldAuctions",System.Diagnostics.ActivityKind.Server)?.Start();
+            using var span = Updater.activitySource.CreateActivity("SoldAuctions", System.Diagnostics.ActivityKind.Server)?.Start();
             List<SaveAuction> auctions = await DownloadSells("https://api.hypixel.net");
             //Updater.AddSoldAuctions(auctions, span);
 
@@ -64,10 +64,13 @@ namespace Coflnet.Sky.Updater
                 NBT.FillDetails(a, item.ItemBytes, true);
                 if (a.Tier == Tier.UNKNOWN)
                     Console.WriteLine("unkown tier" + NBT.Pretty(item.ItemBytes));
-                
+
                 return a;
             }).ToList();
-            Console.WriteLine($"Updated {expired.Auctions.Count} bin sells eg {expired.Auctions.FirstOrDefault()?.Uuid}");
+            if (Updater.updaterIndex % 2 == 0)
+                Console.WriteLine($"Updated {expired.Auctions.Count} bin sells eg {expired.Auctions.FirstOrDefault()?.Uuid}");
+            else
+                Console.WriteLine($"Updated {expired.Auctions.Count} bin sells {string.Join(',', auctions.Select(a => a.Uuid))}");
             return auctions;
         }
     }
