@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using Coflnet.Kafka;
 using Coflnet.Sky.Core;
 using Coflnet.Sky.Updater;
-using Coflnet.Sky.Updater.Models;
 using Confluent.Kafka;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -17,9 +13,9 @@ namespace SkyUpdater.Controllers
     public class ApiController : ControllerBase
     {
         private readonly ILogger<ApiController> _logger;
-        private KafkaCreator kafkaCreator;
+        private Coflnet.Sky.Kafka.KafkaCreator kafkaCreator;
 
-        public ApiController(ILogger<ApiController> logger, KafkaCreator kafkaCreator)
+        public ApiController(ILogger<ApiController> logger, Coflnet.Sky.Kafka.KafkaCreator kafkaCreator)
         {
             _logger = logger;
             this.kafkaCreator = kafkaCreator;
