@@ -74,14 +74,14 @@ namespace Coflnet.Sky.Updater
         Prometheus.Counter newAuctions = Prometheus.Metrics.CreateCounter("sky_updater_new_auctions", "Increases every time a new auction is found");
 
         public static ActivitySource activitySource;
-        public KafkaCreator kafkaCreator;
+        public Kafka.KafkaCreator kafkaCreator;
 
         /// <summary>
         /// Limited task factory
         /// </summary>
         TaskFactory taskFactory;
 
-        public Updater(string apiKey, IItemSkinHandler skinHandler, ActivitySource pactivitySource, KafkaCreator kafkaCreator)
+        public Updater(string apiKey, IItemSkinHandler skinHandler, ActivitySource pactivitySource, Kafka.KafkaCreator kafkaCreator)
         {
             this.apiKey = apiKey;
             this.apiClient = new Hypixel.NET.HypixelApi(apiKey, 1);

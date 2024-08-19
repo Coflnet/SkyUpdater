@@ -24,12 +24,12 @@ namespace Coflnet.Sky.Updater
         protected virtual string ApiBaseUrl => "https://api.hypixel.net";
         private static HttpClient httpClient = new HttpClient();
         private ActivitySource activitySource;
-        private KafkaCreator kafkaCreator;
+        private Kafka.KafkaCreator kafkaCreator;
         private readonly Gauge firstByteTime = Metrics.CreateGauge("sky_update_first_byte", "Time till first byte");
         private readonly Gauge firstParsed = Metrics.CreateGauge("sky_update_first_parsed", "Time till first parsed auction");
         private readonly Gauge pageOneDone = Metrics.CreateGauge("sky_update_page_one_done", "Time till first page done");
 
-        public NewUpdater(ActivitySource activitySource, KafkaCreator kafkaCreator)
+        public NewUpdater(ActivitySource activitySource, Kafka.KafkaCreator kafkaCreator)
         {
             this.activitySource = activitySource;
             this.kafkaCreator = kafkaCreator;

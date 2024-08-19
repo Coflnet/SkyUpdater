@@ -101,9 +101,9 @@ public class BazaarUpdater
         }).ConfigureAwait(false); ;
     }
 
-    private KafkaCreator kafkaCreator;
+    private Kafka.KafkaCreator kafkaCreator;
 
-    public BazaarUpdater(KafkaCreator kafkaCreator)
+    public BazaarUpdater(Kafka.KafkaCreator kafkaCreator)
     {
         this.kafkaCreator = kafkaCreator;
     }

@@ -15,10 +15,10 @@ namespace Coflnet.Sky.Updater
     {
         ItemSkinHandler skinHandler;
         ActivitySource activitySource;
-        KafkaCreator kafkaCreator;
+        Kafka.KafkaCreator kafkaCreator;
         Topics topics;
         IConfiguration config;
-        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, KafkaCreator kafkaCreator, Topics topics, IConfiguration config)
+        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, Kafka.KafkaCreator kafkaCreator, Topics topics, IConfiguration config)
         {
             this.skinHandler = skinHandler;
             this.activitySource = activitySource;
