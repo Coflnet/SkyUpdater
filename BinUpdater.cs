@@ -37,7 +37,8 @@ namespace Coflnet.Sky.Updater
         {
             string firstFoundUuid = null;
             List<SaveAuction> auctions = new List<SaveAuction>();
-            while (firstFoundUuid == LastFirst)
+            var tries = 0;
+            while ((firstFoundUuid == LastFirst || auctions.Count == 0) && tries ++ < 5)
             {
                 auctions = await DownloadAndParse(BaseUrl).ConfigureAwait(false);
                 firstFoundUuid = auctions.FirstOrDefault()?.Uuid;
@@ -90,6 +91,11 @@ namespace Coflnet.Sky.Updater
 
                 return a;
             }).ToList();
+            if(auctions.Count == 0)
+            {
+                Console.WriteLine("No auctions found");
+                Console.WriteLine(response.Content);
+            }
             return auctions;
         }
     }
