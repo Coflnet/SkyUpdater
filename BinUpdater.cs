@@ -7,6 +7,7 @@ using Coflnet.Sky.Core;
 using Hypixel.NET;
 using Hypixel.NET.SkyblockApi;
 using Newtonsoft.Json;
+using Prometheus;
 using RestSharp;
 
 namespace Coflnet.Sky.Updater
@@ -15,6 +16,7 @@ namespace Coflnet.Sky.Updater
     {
         private List<string> apiKeys = new List<string>();
         private static string LastFirst = null;
+        static Gauge binSells = Metrics.CreateGauge("sky_auction_ended", "The amount of sold or ended auctions");
 
         public BinUpdater(IEnumerable<string> apiKeys)
         {
@@ -53,6 +55,7 @@ namespace Coflnet.Sky.Updater
             else
                 Console.WriteLine($"Updated {auctions.Count} bin sells {string.Join(',', auctions.Select(a => a.Uuid))}");
             LastFirst = firstFoundUuid;
+            binSells.Set(auctions.Count);
             return auctions;
         }
 
