@@ -40,7 +40,7 @@ namespace Coflnet.Sky.Updater
             await kafkaCreator.CreateTopicIfNotExist(topics.Sold_Auction);
             await kafkaCreator.CreateTopicIfNotExist(topics.Auction_Ended);
             await kafkaCreator.CreateTopicIfNotExist(topics.Auction_Check);
-            
+
             var bazzar = new BazaarUpdater(kafkaCreator);
             var updater = new Updater(null, skinHandler, activitySource, kafkaCreator);
             var loading = ItemDetails.Instance.LoadFromDB();
@@ -48,8 +48,7 @@ namespace Coflnet.Sky.Updater
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
                 Updater.updaterIndex = 0;
 
-            if (Updater.updaterIndex % 2 == 0)
-                bazzar.UpdateForEver(null);
+            bazzar.UpdateForEver(null);
             updater.UpdateForEver();
             try
             {
