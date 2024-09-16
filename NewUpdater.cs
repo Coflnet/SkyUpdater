@@ -221,7 +221,7 @@ namespace Coflnet.Sky.Updater
                         using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();
                         try
                         {
-                            FoundNew(pageId, p, page, tryCount, auction, prodSpan);
+                            FoundNew(pageId, p, page, tryCount, auction, prodSpan, count);
                         }
                         catch (Exception e)
                         {
@@ -257,11 +257,12 @@ namespace Coflnet.Sky.Updater
             return (page.LastUpdated, age);
         }
 
-        protected virtual void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, Activity prodSpan)
+        protected virtual void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, Activity prodSpan, int count)
         {
             var a = Updater.ConvertAuction(auction, page.LastUpdated);
             a.Context["upage"] = pageId.ToString();
             a.Context["utry"] = tryCount.ToString();
+            a.Context["ucount"] = count.ToString();
             Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, a, prodSpan);
         }
 
