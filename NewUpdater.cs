@@ -50,7 +50,7 @@ namespace Coflnet.Sky.Updater
                     var page = 0;
                     try
                     {
-                        var waitTime = lastUpdate + TimeSpan.FromSeconds(66.5) - DateTime.Now;
+                        var waitTime = lastUpdate + TimeSpan.FromSeconds(65.2) - DateTime.Now;
                         if (waitTime < TimeSpan.FromSeconds(0))
                             waitTime = TimeSpan.FromSeconds(0);
                         await Task.Delay(waitTime);
