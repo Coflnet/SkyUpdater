@@ -250,7 +250,7 @@ namespace Coflnet.Sky.Updater
                 LogHeaderName(siteSpan, s, "age");
                 LogHeaderName(siteSpan, s, "date");
                 LogHeaderName(siteSpan, s, "cf-ray");
-                int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
+                _ = int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
 
                 Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}");
             }
