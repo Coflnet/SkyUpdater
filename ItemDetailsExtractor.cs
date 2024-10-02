@@ -8,7 +8,6 @@ using Coflnet.Sky.Updater.Models;
 using dev;
 using Coflnet.Sky.Core;
 using Newtonsoft.Json;
-using static Coflnet.Sky.Core.ItemDetails;
 
 namespace Coflnet.Sky.Updater
 {
