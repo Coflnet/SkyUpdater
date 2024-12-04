@@ -220,8 +220,12 @@ namespace Coflnet.Sky.Updater
                         index++;
                         if (auction.Start < lastUpdate)
                         {
-                            if(index % 500 == 0)
+                            if (index % 250 == 0)
+                            {
                                 Console.WriteLine($"skipping {auction.Uuid} {auction.Start} {pageId} {index}");
+                                if (index - count > 10)
+                                    break;
+                            }
                             continue;
                         }
                         using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();
