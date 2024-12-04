@@ -253,8 +253,13 @@ namespace Coflnet.Sky.Updater
                 _ = int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
 
                 Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}");
+                UpdateDone();
             }
             return (page.LastUpdated, age);
+        }
+
+        protected virtual void UpdateDone()
+        {
         }
 
         protected virtual void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, Activity prodSpan, int count)
