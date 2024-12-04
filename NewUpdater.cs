@@ -133,6 +133,7 @@ namespace Coflnet.Sky.Updater
             var client = GetClient();
             var count = 0;
             var tryCount = 0;
+            var index = 0;
             var age = 0;
             string uuid = null;
             var overallUpdateCancle = new CancellationTokenSource(20000);
@@ -216,8 +217,13 @@ namespace Coflnet.Sky.Updater
                     var pagUpdatedAt = page.LastUpdated;
                     await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")).ConfigureAwait(false))
                     {
+                        index++;
                         if (auction.Start < lastUpdate)
+                        {
+                            if(index % 500 == 0)
+                                Console.WriteLine($"skipping {auction.Uuid} {auction.Start} {pageId} {index}");
                             continue;
+                        }
                         using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();
                         try
                         {
