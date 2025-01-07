@@ -140,13 +140,12 @@ namespace Coflnet.Sky.Updater
             if (pageUpdate != null)
                 overallUpdateCancle = pageUpdate;
             var start = DateTime.Now;
-            var buster = 1;
             while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
             {
                 var downloadStart = DateTime.Now;
                 var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(15);
                 //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
-                var message = new HttpRequestMessage(HttpMethod.Get, ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId + "&" + buster);
+                var message = new HttpRequestMessage(HttpMethod.Get, ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId);
                 message.Headers.IfModifiedSince = minModTime;
                 message.Headers.From = "Coflnet";
                 CancellationTokenSource tokenSource;
@@ -169,7 +168,6 @@ namespace Coflnet.Sky.Updater
                 {
                     if (tryCount++ % 20 == 1)
                         Console.WriteLine($" - 20x not changed {pageId} {s.StatusCode}");
-                    buster++;
                     await Task.Delay(5);
                     continue;
                 }
@@ -225,7 +223,7 @@ namespace Coflnet.Sky.Updater
                             if (index % 250 == 0)
                             {
                                 Console.WriteLine($"skipping {auction.Uuid} {auction.Start} {pageId} {index}");
-                                if (index - count > 20)
+                                if (index - count > 10)
                                     break;
                             }
                             continue;

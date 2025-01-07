@@ -7,8 +7,6 @@ using System.Threading.Tasks;
 using Confluent.Kafka;
 using dev;
 using Coflnet.Kafka;
-using RestSharp;
-using Newtonsoft.Json;
 
 namespace Coflnet.Sky.Updater;
 public class BazaarUpdater
@@ -24,16 +22,7 @@ public class BazaarUpdater
 
     private async Task PullAndSave(HypixelApi api, int i)
     {
-        //Create the request
-        var client = new RestClient("https://api.hypixel.net/");
-        var request = new RestRequest($"v2/skyblock/bazaar", Method.Get);
-        //Get the response and Deserialize
-        var response = await client.ExecuteAsync(request).ConfigureAwait(false);
-        var result = await Task.Run(() => JsonConvert.DeserializeObject<Hypixel.NET.SkyblockApi.Bazaar.GetBazaarProducts>(response.Content)).ConfigureAwait(false);
-        Console.WriteLine($"{result.LastUpdated} Updated");
-        Console.WriteLine($"{DateTime.UtcNow} Now");
-        Console.WriteLine($"{response.Headers.Where(h => h.Name.Equals("last-modified", StringComparison.OrdinalIgnoreCase)).First().Value} header");
-        Console.WriteLine($"{response.Headers.Where(h => h.Name.Equals("age", StringComparison.OrdinalIgnoreCase)).First().Value} age");
+        var result = await api.GetBazaarProductsAsync();
         var pull = new BazaarPull()
         {
             Timestamp = result.LastUpdated
