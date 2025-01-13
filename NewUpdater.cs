@@ -140,12 +140,13 @@ namespace Coflnet.Sky.Updater
             if (pageUpdate != null)
                 overallUpdateCancle = pageUpdate;
             var start = DateTime.Now;
+            var dnsName = System.Net.Dns.GetHostName();
             while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
             {
                 var downloadStart = DateTime.Now;
                 var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(15);
                 //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
-                var message = new HttpRequestMessage(HttpMethod.Get, ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId);
+                var message = new HttpRequestMessage(HttpMethod.Get, ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId + "&from=" + dnsName);
                 message.Headers.IfModifiedSince = minModTime;
                 message.Headers.From = "Coflnet";
                 CancellationTokenSource tokenSource;
