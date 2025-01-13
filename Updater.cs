@@ -487,8 +487,10 @@ namespace Coflnet.Sky.Updater
             return ConvertAuction(auction, DateTime.UtcNow);
         }
 
-        public static SaveAuction ConvertAuction(Auction auction, DateTime apiUpdate)
+        public static SaveAuction ConvertAuction(Auction auction, DateTime apiUpdate, DateTime findTime = default)
         {
+            if(findTime == default)
+                findTime = DateTime.Now;
             var a = new SaveAuction()
             {
                 ClaimedBids = auction.ClaimedBidders?.Select(s => new UuId((string)s))?.ToList(),
@@ -509,7 +511,7 @@ namespace Coflnet.Sky.Updater
                 Bids = new List<SaveBids>(),
                 Bin = auction.BuyItNow, // missing from nuget package
                 UId = AuctionService.Instance.GetId(auction.Uuid),
-                Context = new Dictionary<string, string>() { { "upT", apiUpdate.ToString() }, { "fT", (DateTime.Now - apiUpdate).ToString() }, { "lore", auction.ItemLore } }
+                Context = new Dictionary<string, string>() { { "upT", apiUpdate.ToString() }, { "fT", (findTime - apiUpdate).ToString() }, { "lore", auction.ItemLore } }
             };
 
             if (auction.Bids != null)
