@@ -7,7 +7,6 @@ using System.Collections.Concurrent;
 using Coflnet.Sky.Updater.Models;
 using Coflnet.Sky.Core;
 using System.Diagnostics;
-using fNbt;
 using fNbt.Tags;
 
 namespace Coflnet.Sky.Updater;
@@ -19,7 +18,7 @@ public interface IItemSkinHandler
 
 public class ItemSkinHandler : BackgroundService, IItemSkinHandler
 {
-    private Sky.Items.Client.Api.IItemsApi itemsApi;
+    private IItemsApi itemsApi;
     private ConcurrentDictionary<string, bool> skinNames = new();
     private ActivitySource activitySource;
 
