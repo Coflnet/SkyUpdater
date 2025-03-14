@@ -146,7 +146,10 @@ namespace Coflnet.Sky.Updater
                 var downloadStart = DateTime.Now;
                 var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(15);
                 //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
-                var message = new HttpRequestMessage(HttpMethod.Get, ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId);
+                var url = ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId ;
+                if(iter >= 1)
+                    url += "&cache=" + dnsName;
+                var message = new HttpRequestMessage(HttpMethod.Get, url);
                 message.Headers.IfModifiedSince = minModTime;
                 message.Headers.From = "Coflnet";
                 CancellationTokenSource tokenSource;
