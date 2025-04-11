@@ -49,7 +49,7 @@ namespace Coflnet.Sky.Updater
                     var page = 0;
                     try
                     {
-                        var waitTime = lastUpdate + TimeSpan.FromSeconds(65.2) - DateTime.Now;
+                        var waitTime = lastUpdate + TimeSpan.FromSeconds(66.2) - DateTime.Now;
                         if (waitTime < TimeSpan.FromSeconds(0))
                             waitTime = TimeSpan.FromSeconds(0);
                         await Task.Delay(waitTime);
@@ -263,6 +263,8 @@ namespace Coflnet.Sky.Updater
                 LogHeaderName(siteSpan, s, "age");
                 LogHeaderName(siteSpan, s, "date");
                 LogHeaderName(siteSpan, s, "cf-ray");
+                siteSpan.SetTag("host", System.Net.Dns.GetHostName());
+
                 _ = int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
 
                 Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}");
