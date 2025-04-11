@@ -146,10 +146,10 @@ namespace Coflnet.Sky.Updater
                 var downloadStart = DateTime.Now;
                 var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(15);
                 //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
-                var url = ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId ;
-                if(iter >= 1)
-                    url += "&cache=" + dnsName;
-                if(iter >= 2)
+                var url = ApiBaseUrl + "/v2/skyblock/auctions";
+                if (iter >= 1 || pageId != 0)
+                    url += "?page=" + pageId;
+                if (iter == 3)
                     url += "&t=" + tryCount;
                 var message = new HttpRequestMessage(HttpMethod.Get, url);
                 message.Headers.IfModifiedSince = minModTime;
