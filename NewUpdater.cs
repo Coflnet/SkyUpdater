@@ -34,6 +34,11 @@ namespace Coflnet.Sky.Updater
             this.kafkaCreator = kafkaCreator;
         }
 
+        static NewUpdater()
+        {
+            httpClient.DefaultRequestHeaders.ConnectionClose = false;
+        }
+
         public async Task DoUpdates(int index, CancellationToken token)
         {
             var lastUpdate = DateTime.Now - TimeSpan.FromMinutes(2);
