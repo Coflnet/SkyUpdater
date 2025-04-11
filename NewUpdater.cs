@@ -21,7 +21,7 @@ namespace Coflnet.Sky.Updater
     {
         private const int REQUEST_BACKOF_DELAY = 60;
         protected virtual string ApiBaseUrl => "https://api.hypixel.net";
-        private static HttpClient httpClient = new HttpClient();
+        private HttpClient httpClient = new HttpClient();
         private ActivitySource activitySource;
         private Kafka.KafkaCreator kafkaCreator;
         private readonly Gauge firstByteTime = Metrics.CreateGauge("sky_update_first_byte", "Time till first byte");
@@ -32,10 +32,6 @@ namespace Coflnet.Sky.Updater
         {
             this.activitySource = activitySource;
             this.kafkaCreator = kafkaCreator;
-        }
-
-        static NewUpdater()
-        {
             httpClient.DefaultRequestHeaders.ConnectionClose = false;
         }
 
@@ -153,6 +149,8 @@ namespace Coflnet.Sky.Updater
                 var url = ApiBaseUrl + "/v2/skyblock/auctions?page=" + pageId ;
                 if(iter >= 1)
                     url += "&cache=" + dnsName;
+                if(iter >= 2)
+                    url += "&t=" + tryCount;
                 var message = new HttpRequestMessage(HttpMethod.Get, url);
                 message.Headers.IfModifiedSince = minModTime;
                 message.Headers.From = "Coflnet";
