@@ -14,6 +14,7 @@ using RestSharp;
 using System.Diagnostics;
 using dev;
 using Prometheus;
+using System.Net.Http.Json;
 
 namespace Coflnet.Sky.Updater
 {
@@ -144,7 +145,7 @@ namespace Coflnet.Sky.Updater
             while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
             {
                 var downloadStart = DateTime.Now;
-                var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(15);
+                var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(65);
                 //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
                 var url = ApiBaseUrl + "/v2/skyblock/auctions";
                 if (iter >= 1 || pageId != 0)
@@ -254,7 +255,7 @@ namespace Coflnet.Sky.Updater
                             Updater.LastPull = (page._lastUpdated / 1000).ThisIsNowATimeStamp();
                             firstByteTime.Set((downloadStart - pagUpdatedAt).TotalSeconds);
                             firstParsed.Set((intermediate - pagUpdatedAt).TotalSeconds);
-                            Console.WriteLine($"dls:{downloadStart.Second}.{downloadStart.Millisecond} \tparse:{intermediate.Second}.{intermediate.Millisecond} \tnow: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  \n{updatedAt} {tage}{(DateTime.Now - start)}");
+                            Console.WriteLine($"dls:{downloadStart.Second}.{downloadStart.Millisecond} \tparse:{intermediate.Second}.{intermediate.Millisecond} \tnow: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  by{iter}\n{updatedAt} {tage}{(DateTime.Now - start)}");
                         }
                         uuid = auction.Uuid;
 
