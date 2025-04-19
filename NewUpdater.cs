@@ -20,7 +20,7 @@ namespace Coflnet.Sky.Updater
 {
     public class NewUpdater
     {
-        private const int REQUEST_BACKOF_DELAY = 60;
+        private const int REQUEST_BACKOF_DELAY = 10;
         protected virtual string ApiBaseUrl => "https://api.hypixel.net";
         private HttpClient httpClient = new HttpClient();
         private ActivitySource activitySource;
@@ -204,12 +204,13 @@ namespace Coflnet.Sky.Updater
                     if (page.LastUpdated <= lastUpdate)
                     {
                         tryCount++;
-                        if (tryCount > 10)
+                        if (tryCount > 50)
                         {
                             // give up and retry next minute
                             return (lastUpdate, 0);
                         }
                         siteSpan?.SetTag("try", tryCount);
+                        Console.WriteLine("backoff" + tryCount);
                         // wait for the server cache to refresh
                         await Task.Delay(REQUEST_BACKOF_DELAY * tryCount);
                         continue;
