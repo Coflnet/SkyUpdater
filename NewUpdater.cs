@@ -150,10 +150,17 @@ namespace Coflnet.Sky.Updater
                 var url = ApiBaseUrl + "/v2/skyblock/auctions";
                 if (iter >= 1 || pageId != 0)
                     url += "?page=" + pageId;
-                if (iter == 3)
+                if (iter == 4)
                     url += "&t=" + tryCount;
                 var message = new HttpRequestMessage(HttpMethod.Get, url);
                 message.Headers.IfModifiedSince = minModTime;
+                if (iter == 2)
+                    message.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue()
+                    {
+                        NoCache = true,
+                        MustRevalidate = true,
+                        MaxAge = TimeSpan.FromSeconds(0)
+                    };
                 message.Headers.From = "Coflnet";
                 CancellationTokenSource tokenSource;
                 HttpResponseMessage s;
