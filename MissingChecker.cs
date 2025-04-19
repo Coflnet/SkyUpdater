@@ -131,7 +131,7 @@ public class MissingChecker : BackgroundService
         if (response.StatusCode != System.Net.HttpStatusCode.OK)
         {
             logger.LogError($"error getting auctions status {response.StatusCode} " + response.Content);
-            throw new Exception($"error getting auctions from {playerId}-{response.StatusCode}");
+            throw new Exception($"error getting auctions from {playerId}-{response.StatusCode}{(response.Content.Contains("Invalid API key") ? "Invalid API key" : "")}");
         }
         var responseDeserialized = JsonConvert.DeserializeObject<AuctionsByPlayer>(response?.Content);
         return responseDeserialized.Auctions.Select(Updater.ConvertAuction);
