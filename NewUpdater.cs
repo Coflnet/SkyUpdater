@@ -151,7 +151,7 @@ namespace Coflnet.Sky.Updater
                 if (iter >= 1 || pageId != 0)
                     url += "?page=" + pageId;
                 if (iter == 4)
-                    url += "&t=" + tryCount;
+                    url += "&t=" + tryCount + dnsName;
                 var message = new HttpRequestMessage(HttpMethod.Get, url);
                 message.Headers.IfModifiedSince = minModTime;
                 if (iter == 2)
