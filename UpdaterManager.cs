@@ -16,15 +16,17 @@ namespace Coflnet.Sky.Updater
         ItemSkinHandler skinHandler;
         ActivitySource activitySource;
         Kafka.KafkaCreator kafkaCreator;
+        readonly ItemDetails itemDetails;
         Topics topics;
         IConfiguration config;
-        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, Kafka.KafkaCreator kafkaCreator, Topics topics, IConfiguration config)
+        public UpdaterManager(ItemSkinHandler skinHandler, ActivitySource activitySource, Kafka.KafkaCreator kafkaCreator, Topics topics, IConfiguration config, ItemDetails itemDetails)
         {
             this.skinHandler = skinHandler;
             this.activitySource = activitySource;
             this.kafkaCreator = kafkaCreator;
             this.topics = topics;
             this.config = config;
+            this.itemDetails = itemDetails;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -43,7 +45,7 @@ namespace Coflnet.Sky.Updater
 
             var bazzar = new BazaarUpdater(kafkaCreator);
             var updater = new Updater(null, skinHandler, activitySource, kafkaCreator);
-            var loading = ItemDetails.Instance.LoadFromDB();
+            var loading = itemDetails.LoadFromDB();
 
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
                 Updater.updaterIndex = 0;

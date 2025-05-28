@@ -13,19 +13,13 @@ namespace Coflnet.Sky.Updater
 {
     public class ItemDetailsExtractor
     {
-        public ConcurrentDictionary<string, ItemDetails.Item> Items => ItemDetails.Instance.Items;
+        ItemDetails itemDetails;
+        public ConcurrentDictionary<string, ItemDetails.Item> Items => itemDetails.Items;
         private static ConcurrentDictionary<string, DBItem> ToFillDetails = new ConcurrentDictionary<string, DBItem>();
 
-        public void LoadToFill()
+        public ItemDetailsExtractor(ItemDetails itemDetails)
         {
-            using (var context = new HypixelContext())
-            {
-                var items = context.Items.Where(item => item.Description == null);
-                foreach (var item in items)
-                {
-                    ToFillDetails.TryAdd(item.Tag, item);
-                }
-            }
+            this.itemDetails = itemDetails;
         }
         
         public void AddOrIgnoreDetails(Auction a)
@@ -100,13 +94,13 @@ namespace Coflnet.Sky.Updater
 
             //SetIconUrl(a, i);
 
-            ItemDetails.Instance.Items[name] = i;
+            itemDetails.Items[name] = i;
             var newItem = new DBItem(i);
 
             System.Threading.Tasks.Task.Run(async () =>
             {
                 if (existingItem == null)
-                    ItemDetails.Instance.AddItemToDB(newItem);
+                    itemDetails.AddItemToDB(newItem);
                 else
                     await UpdateItem(existingItem, newItem);
             }).ConfigureAwait(false); ;
