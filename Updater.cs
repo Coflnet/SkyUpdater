@@ -502,7 +502,7 @@ namespace Coflnet.Sky.Updater
                 Start = auction.Start,
                 Coop = auction.Coop,
 
-                ProfileId = auction.ProfileId == auction.Auctioneer ? null : auction.ProfileId,
+                ProfileId = auction.ProfileId,
                 AuctioneerId = auction.Auctioneer,
                 Uuid = auction.Uuid,
                 HighestBidAmount = auction.HighestBidAmount,
