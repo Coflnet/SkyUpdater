@@ -72,6 +72,7 @@ public class BinUpdater
             {
                 Uuid = item.Uuid,
                 AuctioneerId = item.Seller,
+                ProfileId = item.ProfileId,
                 Bids = new List<SaveBids>()
                     {
                             new SaveBids()
@@ -79,7 +80,7 @@ public class BinUpdater
                                 Amount = item.Price,
                                     Bidder = item.Buyer,
                                     Timestamp = item.TimeStamp,
-                                    ProfileId = "unknown"
+                                    ProfileId = item.BuyerProfile
                             }
                     },
                 HighestBidAmount = item.Price,
