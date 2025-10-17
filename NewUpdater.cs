@@ -51,7 +51,7 @@ public class NewUpdater
                 var page = 0;
                 try
                 {
-                    var waitTime = lastUpdate + TimeSpan.FromSeconds(66.2) - DateTime.Now;
+                    var waitTime = lastUpdate + TimeSpan.FromSeconds(65.8) - DateTime.Now;
                     if (waitTime < TimeSpan.FromSeconds(0))
                         waitTime = TimeSpan.FromSeconds(0);
                     await Task.Delay(waitTime);
