@@ -51,7 +51,7 @@ public class NewUpdater
                 var page = 0;
                 try
                 {
-                    var waitTime = lastUpdate + TimeSpan.FromSeconds(65.8) - DateTime.Now;
+                    var waitTime = lastUpdate + TimeSpan.FromSeconds(64.8) - DateTime.Now;
                     if (waitTime < TimeSpan.FromSeconds(0))
                         waitTime = TimeSpan.FromSeconds(0);
                     await Task.Delay(waitTime);
@@ -145,7 +145,7 @@ public class NewUpdater
         while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
         {
             var downloadStart = DateTime.Now;
-            var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(65);
+            var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(64);
             //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
             var url = ApiBaseUrl + "/v2/skyblock/auctions";
             if (iter >= 1 || pageId != 0)
