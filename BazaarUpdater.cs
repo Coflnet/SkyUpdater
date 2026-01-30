@@ -18,59 +18,72 @@ public class BazaarUpdater
     public static Dictionary<string, QuickStatus> LastStats = new Dictionary<string, QuickStatus>();
 
     public static readonly string KafkaTopic = SimplerConfig.Config.Instance["TOPICS:BAZAAR"];
-    protected int SecondsBetweenUpdates = 10;
 
-    private async Task PullAndSave(HypixelApi api, int i)
+    private async Task<DateTime> PullAndSave(HypixelApi api, int i, DateTime lastUpdate)
     {
-        var result = await api.GetBazaarProductsAsync();
-        var pull = new BazaarPull()
+        var tryCount = 0;
+        var maxRetries = 100;
+        while (tryCount < maxRetries)
         {
-            Timestamp = result.LastUpdated
-        };
-        pull.Products = result.Products.Select(p =>
-        {
-            var pInfo = new ProductInfo()
+            var result = await api.GetBazaarProductsAsync();
+            
+            // Check if timestamp changed
+            if (result.LastUpdated <= lastUpdate)
             {
-                ProductId = p.Value.ProductId,
-                BuySummery = p.Value.BuySummary.Select(s => new BuyOrder()
-                {
-                    Amount = (int)s.Amount,
-                    Orders = (short)s.Orders,
-                    PricePerUnit = s.PricePerUnit
-                }).ToList(),
-                SellSummary = p.Value.SellSummary.Select(s => new SellOrder()
-                {
-                    Amount = (int)s.Amount,
-                    Orders = (short)s.Orders,
-                    PricePerUnit = s.PricePerUnit
-                }).ToList(),
-                QuickStatus = new QuickStatus()
-                {
-                    ProductId = p.Value.QuickStatus.ProductId,
-                    BuyMovingWeek = p.Value.QuickStatus.BuyMovingWeek,
-                    BuyOrders = (int)p.Value.QuickStatus.BuyOrders,
-                    BuyPrice = p.Value.QuickStatus.BuyPrice,
-                    BuyVolume = p.Value.QuickStatus.BuyVolume,
-                    SellMovingWeek = p.Value.QuickStatus.SellMovingWeek,
-                    SellOrders = (int)p.Value.QuickStatus.SellOrders,
-                    SellPrice = p.Value.QuickStatus.SellPrice,
-                    SellVolume = p.Value.QuickStatus.SellVolume
-                },
-                PullInstance = pull
-            };
-            pInfo.QuickStatus.SellPrice = p.Value.SellSummary.Select(o => o.PricePerUnit).FirstOrDefault();
-            pInfo.QuickStatus.BuyPrice = p.Value.BuySummary.Select(o => o.PricePerUnit).FirstOrDefault();
-            return pInfo;
-        }).ToList();
-        await ProduceIntoQueue(pull);
-    }
+                tryCount++;
+                if (tryCount % 10 == 1)
+                    Console.WriteLine($" - Bazaar not updated after {tryCount} attempts, last: {result.LastUpdated}, expected > {lastUpdate}");
+                await Task.Delay(500);
+                continue;
+            }
 
-    private async Task WaitForServerCacheRefresh(int i, DateTime start)
-    {
-        var timeToSleep = start.Add(TimeSpan.FromSeconds(SecondsBetweenUpdates)) - DateTime.Now;
-        Console.Write($"\r {i} {timeToSleep}");
-        if (timeToSleep.Seconds > 0)
-            await Task.Delay(timeToSleep);
+            var pull = new BazaarPull()
+            {
+                Timestamp = result.LastUpdated
+            };
+            pull.Products = result.Products.Select(p =>
+            {
+                var pInfo = new ProductInfo()
+                {
+                    ProductId = p.Value.ProductId,
+                    BuySummery = p.Value.BuySummary.Select(s => new BuyOrder()
+                    {
+                        Amount = (int)s.Amount,
+                        Orders = (short)s.Orders,
+                        PricePerUnit = s.PricePerUnit
+                    }).ToList(),
+                    SellSummary = p.Value.SellSummary.Select(s => new SellOrder()
+                    {
+                        Amount = (int)s.Amount,
+                        Orders = (short)s.Orders,
+                        PricePerUnit = s.PricePerUnit
+                    }).ToList(),
+                    QuickStatus = new QuickStatus()
+                    {
+                        ProductId = p.Value.QuickStatus.ProductId,
+                        BuyMovingWeek = p.Value.QuickStatus.BuyMovingWeek,
+                        BuyOrders = (int)p.Value.QuickStatus.BuyOrders,
+                        BuyPrice = p.Value.QuickStatus.BuyPrice,
+                        BuyVolume = p.Value.QuickStatus.BuyVolume,
+                        SellMovingWeek = p.Value.QuickStatus.SellMovingWeek,
+                        SellOrders = (int)p.Value.QuickStatus.SellOrders,
+                        SellPrice = p.Value.QuickStatus.SellPrice,
+                        SellVolume = p.Value.QuickStatus.SellVolume
+                    },
+                    PullInstance = pull
+                };
+                pInfo.QuickStatus.SellPrice = p.Value.SellSummary.Select(o => o.PricePerUnit).FirstOrDefault();
+                pInfo.QuickStatus.BuyPrice = p.Value.BuySummary.Select(o => o.PricePerUnit).FirstOrDefault();
+                return pInfo;
+            }).ToList();
+            await ProduceIntoQueue(pull);
+            Console.WriteLine($"Bazaar updated {pull.Products.Count} items eg {pull.Products.First().ProductId} at {result.LastUpdated} ({DateTime.UtcNow}) tries {tryCount}");
+            return result.LastUpdated;
+        }
+        
+        // Give up after max retries, log it and return unchanged
+        Console.WriteLine($"Bazaar update gave up after {maxRetries} tries at {DateTime.Now}, no update available");
+        return lastUpdate;
     }
 
     public void UpdateForEver(string apiKey)
@@ -79,15 +92,30 @@ public class BazaarUpdater
         Task.Run(async () =>
         {
             int i = 0;
+            var lastUpdate = DateTime.Now - TimeSpan.FromMinutes(2);
             while (!abort)
             {
                 try
                 {
                     if (api == null)
                         api = new HypixelApi(apiKey, 9);
-                    var start = DateTime.Now;
-                    await PullAndSave(api, i);
-                    await WaitForServerCacheRefresh(i, start);
+                    
+                    // Wait 19.5 seconds after last update before pulling
+                    var waitTime = lastUpdate + TimeSpan.FromSeconds(9.5) - DateTime.Now;
+                    if (waitTime > TimeSpan.Zero)
+                        await Task.Delay(waitTime);
+                    
+                    var result = await PullAndSave(api, i, lastUpdate);
+                    if (result != lastUpdate)
+                    {
+                        lastUpdate = result;
+                    }
+                    else
+                    {
+                        // Update was skipped, wait before retrying
+                        await Task.Delay(500);
+                    }
+                    
                     i++;
                 }
                 catch (Exception e)
