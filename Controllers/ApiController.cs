@@ -27,7 +27,7 @@ namespace SkyUpdater.Controllers
         public DateTime LastUpdate()
         {
             if (Updater.LastPullComplete < DateTime.Now - TimeSpan.FromMinutes(2))
-                return default(DateTime);
+                return default;
             return Updater.LastPull + TimeSpan.FromSeconds(10);
         }
 
