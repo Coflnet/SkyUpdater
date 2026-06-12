@@ -1,9 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /build
-RUN git clone --depth=1 https://github.com/Coflnet/HypixelSkyblock.git dev
 RUN mkdir -p /build/skyblock/External/api
 RUN git clone --depth=1 https://github.com/Ekwav/Hypixel.NET.git
-WORKDIR /build/SkyCommand
+WORKDIR /build/SkyUpdater
 COPY SkyUpdater.csproj .
 RUN dotnet restore
 COPY . .
