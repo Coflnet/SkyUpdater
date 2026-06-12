@@ -14,7 +14,6 @@ using RestSharp;
 using System.Diagnostics;
 using dev;
 using Prometheus;
-using System.Net.Http.Json;
 
 namespace Coflnet.Sky.Updater;
 
