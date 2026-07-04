@@ -21,7 +21,18 @@ public class NewUpdater
 {
     private const int REQUEST_BACKOF_DELAY = 10;
     protected virtual string ApiBaseUrl => "https://api.hypixel.net";
-    private HttpClient httpClient = new HttpClient();
+    private HttpClient httpClient = new HttpClient(new SocketsHttpHandler()
+    {
+        // gzip only: brotli costs 30-40ms extra ttfb (cloudflare recompresses on the fly)
+        AutomaticDecompression = System.Net.DecompressionMethods.GZip,
+        EnableMultipleHttp2Connections = true,
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+        InitialHttp2StreamWindowSize = 4 * 1024 * 1024 // default 64KB throttles the MB-sized page bodies
+    })
+    {
+        DefaultRequestVersion = System.Net.HttpVersion.Version20,
+        DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
+    };
     private ActivitySource activitySource;
     private Kafka.KafkaCreator kafkaCreator;
     private readonly Gauge firstByteTime = Metrics.CreateGauge("sky_update_first_byte", "Time till first byte");
@@ -152,6 +163,9 @@ public class NewUpdater
             if (iter == 4)
                 url += "&t=" + tryCount + dnsName;
             var message = new HttpRequestMessage(HttpMethod.Get, url);
+            // DefaultRequestVersion only applies to convenience methods, has to be set per message
+            message.Version = System.Net.HttpVersion.Version20;
+            message.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
             message.Headers.IfModifiedSince = minModTime;
             if (iter == 2)
                 message.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue()
@@ -198,15 +212,10 @@ public class NewUpdater
             }
             //page._lastUpdated = root.GetProperty("lastUpdated").GetInt64();
 
-            var serializer = new Newtonsoft.Json.JsonSerializer();
-            using (StreamReader sr = new StreamReader(await s.Content.ReadAsStreamAsync().ConfigureAwait(false)))
-            using (JsonReader reader = new JsonTextReader(sr))
+            using (var bodyStream = await s.Content.ReadAsStreamAsync().ConfigureAwait(false))
             {
-                for (int i = 0; i < 11; i++)
-                {
-                    reader.Read();
-                }
-                page._lastUpdated = (long)reader.Value;
+                var parser = new AuctionPageStream(bodyStream);
+                page._lastUpdated = await parser.ReadLastUpdated().ConfigureAwait(false);
                 if (page.LastUpdated <= lastUpdate)
                 {
                     tryCount++;
@@ -227,9 +236,8 @@ public class NewUpdater
                     return (lastUpdate, 0);
                 }
                 overallUpdateCancle.Cancel();
-                reader.Read();
                 var pagUpdatedAt = page.LastUpdated;
-                await foreach (var auction in reader.SelectTokensWithRegex<Auction>(new System.Text.RegularExpressions.Regex(@"^auctions\[\d+\]$")).ConfigureAwait(false))
+                await foreach (var auction in parser.ReadAuctions().ConfigureAwait(false))
                 {
                     index++;
                     if (auction.Start < lastUpdate)
