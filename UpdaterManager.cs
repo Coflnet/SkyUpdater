@@ -43,14 +43,14 @@ namespace Coflnet.Sky.Updater
             await kafkaCreator.CreateTopicIfNotExist(topics.Auction_Ended);
             await kafkaCreator.CreateTopicIfNotExist(topics.Auction_Check);
 
-            var bazzar = new BazaarUpdater(kafkaCreator);
+            using var bazzar = new BazaarUpdater(kafkaCreator);
+            var bazaarUpdate = bazzar.UpdateForEver(null, stoppingToken);
             var updater = new Updater(null, skinHandler, activitySource, kafkaCreator);
             var loading = itemDetails.LoadFromDB();
 
             if (!Int32.TryParse(System.Net.Dns.GetHostName().Split('-').Last(), out Updater.updaterIndex))
                 Updater.updaterIndex = 0;
 
-            bazzar.UpdateForEver(null);
             updater.UpdateForEver();
             try
             {
@@ -61,6 +61,7 @@ namespace Coflnet.Sky.Updater
                 Console.WriteLine("-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|");
                 Console.WriteLine($"Failed to load items {e.Message}\n {e.StackTrace}");
             }
+            await bazaarUpdate;
         }
     }
 }

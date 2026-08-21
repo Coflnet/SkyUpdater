@@ -4,20 +4,36 @@ using System.Linq;
 using Coflnet.Sky.Core;
 using Hypixel.NET;
 using System.Threading.Tasks;
+using System.Threading;
 using Confluent.Kafka;
 using dev;
 using Coflnet.Kafka;
+using Prometheus;
 
 namespace Coflnet.Sky.Updater;
-public class BazaarUpdater
+public class BazaarUpdater : IDisposable
 {
-    private bool abort;
-
     public static DateTime LastUpdate { get; internal set; }
 
     public static Dictionary<string, QuickStatus> LastStats = new Dictionary<string, QuickStatus>();
 
     public static readonly string KafkaTopic = SimplerConfig.Config.Instance["TOPICS:BAZAAR"];
+
+    private static readonly Gauge productCount = Metrics.CreateGauge(
+        "sky_updater_bazaar_product_count", "Number of products in the latest Bazaar API update");
+    private static readonly Gauge missingProductCount = Metrics.CreateGauge(
+        "sky_updater_bazaar_missing_product_count", "Products missing compared with the last complete Bazaar API update");
+    private static readonly Gauge lastCompletePullTimestamp = Metrics.CreateGauge(
+        "sky_updater_bazaar_last_complete_pull_timestamp_seconds", "Timestamp of the latest Bazaar API update with the complete known product set");
+    private static readonly Counter incompletePullCount = Metrics.CreateCounter(
+        "sky_updater_bazaar_incomplete_pull_total", "Bazaar API updates missing products from the last complete update");
+    private static readonly Counter publishFailed = Metrics.CreateCounter(
+        "sky_updater_bazaar_publish_failed_total", "Bazaar updates that failed durable Kafka publication");
+    private static readonly Histogram publishDuration = Metrics.CreateHistogram(
+        "sky_updater_bazaar_publish_duration_seconds", "Time spent durably publishing a Bazaar update to Kafka");
+
+    private readonly HashSet<string> expectedProductIds = new();
+    private readonly IProducer<string, BazaarPull> producer;
 
     private async Task<DateTime> PullAndSave(HypixelApi api, int i, DateTime lastUpdate)
     {
@@ -76,6 +92,7 @@ public class BazaarUpdater
                 pInfo.QuickStatus.BuyPrice = p.Value.BuySummary.Select(o => o.PricePerUnit).FirstOrDefault();
                 return pInfo;
             }).ToList();
+            RecordProductCompleteness(pull);
             await ProduceIntoQueue(pull);
             Console.WriteLine($"Bazaar updated {pull.Products.Count} items eg {pull.Products.First().ProductId} at {result.LastUpdated} ({DateTime.UtcNow}) tries {tryCount}");
             return result.LastUpdated;
@@ -86,14 +103,14 @@ public class BazaarUpdater
         return lastUpdate;
     }
 
-    public void UpdateForEver(string apiKey)
+    public Task UpdateForEver(string apiKey, CancellationToken stoppingToken = default)
     {
-        HypixelApi api = null;
-        Task.Run(async () =>
+        return Task.Run(async () =>
         {
+            HypixelApi api = null;
             int i = 0;
             var lastUpdate = DateTime.Now - TimeSpan.FromMinutes(2);
-            while (!abort)
+            while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
@@ -126,31 +143,58 @@ public class BazaarUpdater
                 }
             }
             Console.WriteLine("Stopped Bazaar :/");
-        }).ConfigureAwait(false); ;
+        });
     }
-
-    private Kafka.KafkaCreator kafkaCreator;
 
     public BazaarUpdater(Kafka.KafkaCreator kafkaCreator)
     {
-        this.kafkaCreator = kafkaCreator;
+        producer = kafkaCreator?.BuildProducer<string, BazaarPull>();
     }
 
-    protected virtual Task ProduceIntoQueue(BazaarPull pull)
+    private void RecordProductCompleteness(BazaarPull pull)
     {
-        using (var p = kafkaCreator.BuildProducer<string, BazaarPull>())
+        var currentProductIds = pull.Products.Select(product => product.ProductId).ToHashSet();
+        productCount.Set(currentProductIds.Count);
+        if (expectedProductIds.Count == 0)
+            expectedProductIds.UnionWith(currentProductIds);
+
+        var missing = expectedProductIds.Except(currentProductIds).ToList();
+        missingProductCount.Set(missing.Count);
+        if (missing.Count == 0)
         {
-            p.Produce(KafkaTopic, new Message<string, BazaarPull> { Value = pull, Key = pull.Timestamp.ToString() }, handler =>
-            {
-                Console.WriteLine("wrote bazaar log " + handler.TopicPartitionOffset.Offset);
-            });
-            p.Flush(TimeSpan.FromSeconds(10));
-            return Task.CompletedTask;
+            expectedProductIds.UnionWith(currentProductIds);
+            lastCompletePullTimestamp.Set(new DateTimeOffset(pull.Timestamp.ToUniversalTime()).ToUnixTimeSeconds());
+            return;
+        }
+
+        incompletePullCount.Inc();
+        Logger.Instance.Error($"Bazaar update {pull.Timestamp:O} is missing {missing.Count} products: {string.Join(',', missing)}");
+    }
+
+    protected virtual async Task ProduceIntoQueue(BazaarPull pull)
+    {
+        if (producer == null)
+            throw new InvalidOperationException("No Kafka producer is configured");
+
+        using var timer = publishDuration.NewTimer();
+        try
+        {
+            var result = await producer.ProduceAsync(KafkaTopic,
+                new Message<string, BazaarPull> { Value = pull, Key = pull.Timestamp.ToString() });
+            if (result.Status != PersistenceStatus.Persisted)
+                throw new InvalidOperationException($"Kafka reported Bazaar update persistence status {result.Status}");
+            Console.WriteLine("wrote bazaar log " + result.TopicPartitionOffset.Offset);
+        }
+        catch
+        {
+            publishFailed.Inc();
+            throw;
         }
     }
 
-    internal void Stop()
+    public void Dispose()
     {
-        abort = true;
+        producer?.Flush(TimeSpan.FromSeconds(10));
+        producer?.Dispose();
     }
 }
