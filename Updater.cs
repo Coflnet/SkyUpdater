@@ -32,6 +32,7 @@ namespace Coflnet.Sky.Updater
         private bool abort;
         private static bool minimumOutput;
         IItemSkinHandler skinHandler;
+        private readonly ConcurrentDictionary<long, DateTime> pageUpdates = new();
 
         private static string MissingAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:MISSING_AUCTION"];
         public static string SoldAuctionsTopic = SimplerConfig.Config.Instance["TOPICS:SOLD_AUCTION"];
@@ -101,7 +102,10 @@ namespace Coflnet.Sky.Updater
                 Console.WriteLine($"Usage bevore update {System.GC.GetTotalMemory(false)}");
             var updateStartTime = DateTime.UtcNow.ToLocalTime();
             if (updateAll)
+            {
                 lastUpdateDone = default(DateTime);
+                pageUpdates.Clear();
+            }
 
             try
             {
@@ -142,10 +146,12 @@ namespace Coflnet.Sky.Updater
             Console.WriteLine($"Updating Data {DateTime.Now} " + firstPage.WasSuccessful);
 
             max = (int)firstPage.TotalPages;
-            while (firstPage.LastUpdated == updateStartTime)
+            var refreshDeadline = DateTime.UtcNow.AddMinutes(1);
+            // Later pages can refresh while the first page remains cached for several minutes.
+            while (firstPage.LastUpdated == updateStartTime && (updaterIndex != 0 || DateTime.UtcNow < refreshDeadline))
             {
                 // wait for the server cache to refresh
-                await Task.Delay(REQUEST_BACKOF_DELAY);
+                await Task.Delay(REQUEST_BACKOF_DELAY, token);
                 firstPage = await LoadPage(page, lastUpdate).ConfigureAwait(false);
                 LastPullComplete = DateTime.Now;
             }
@@ -170,15 +176,15 @@ namespace Coflnet.Sky.Updater
                     {
                         var tracer = activitySource;
                         using var scope = tracer.StartActivity("LoadPage")?.SetTag("page", index).Start();
+                        var page = index;
+
+                        if (updaterIndex == 1)
+                            page = max - index - 1;
+                        if (updaterIndex == 2)
+                            page = (index + 40) % max;
+
                         try
                         {
-                            var page = index;
-
-                            if (updaterIndex == 1)
-                                page = max - index - 1;
-                            if (updaterIndex == 2)
-                                page = (index + 40) % max;
-
                             AuctionPage res;
                             using (var libLoadScope = tracer.StartActivity("LoadPage")?.AddTag("page", index).Start())
                             {
@@ -313,11 +319,18 @@ namespace Coflnet.Sky.Updater
             return (page + DropOffset) % 60 == DateTime.Now.Minute;
         }
 
-        private static async Task<AuctionPage> LoadPage(int page, DateTime latUpdate)
+        private DateTime GetPageLastUpdate(long page, DateTime fallback)
+        {
+            if (pageUpdates.TryGetValue(page, out var lastUpdate) && lastUpdate.AddMinutes(-1) < fallback)
+                return lastUpdate.AddMinutes(-1);
+            return fallback;
+        }
+
+        private async Task<AuctionPage> LoadPage(int page, DateTime latUpdate)
         {
             var client = new RestClient("https://api.hypixel.net/v2/skyblock");
             var request = new RestRequest($"auctions?page={page}", Method.Get);
-            request.AddHeader("If-Modified-Since", FormatTime(latUpdate));
+            request.AddHeader("If-Modified-Since", FormatTime(GetPageLastUpdate(page, latUpdate)));
             //Get the response and Deserialize
 
             var response = await client.ExecuteAsync(request).ConfigureAwait(false);
@@ -427,6 +440,8 @@ namespace Coflnet.Sky.Updater
 
         protected virtual async Task<int> Save(AuctionPage res, DateTime lastUpdate, AhStateSumary sumary, IProducer<string, SaveAuction> prod, ActivityContext pageSpanContext)
         {
+            // Use this page's last successful scan so a faster page cannot skip its new auctions.
+            lastUpdate = GetPageLastUpdate(res.Page, lastUpdate);
             List<SaveAuction> processed = new List<SaveAuction>();
             using (var span = activitySource.CreateActivity("parsePage", ActivityKind.Server, pageSpanContext)?.Start())
             {
@@ -456,6 +471,7 @@ namespace Coflnet.Sky.Updater
             ProduceIntoTopic(ended, AuctionEndedTopic, prod, pageSpanContext);
 
             var count = await UpdateSumary(res, sumary);
+            pageUpdates[res.Page] = res.LastUpdated;
             return count;
         }
 
