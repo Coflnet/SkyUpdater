@@ -149,6 +149,7 @@ public class NewUpdater
         var client = GetClient();
         var count = 0;
         var tryCount = 0;
+        var oldPageCount = 0;
         var index = 0;
         var age = 0;
         string uuid = null;
@@ -226,15 +227,16 @@ public class NewUpdater
                     // cloudflare stored the snapshot we already have again, only ask for copies newer than this one
                     minModTime = NewerValidator(minModTime, s.Content.Headers.LastModified, lastUpdate);
                     tryCount++;
-                    if (tryCount > 50)
+                    oldPageCount++;
+                    if (oldPageCount > 50)
                     {
                         // give up and retry next minute
                         return (lastUpdate, 0);
                     }
                     siteSpan?.SetTag("try", tryCount);
-                    Console.WriteLine("backoff" + tryCount);
+                    Console.WriteLine("backoff" + oldPageCount);
                     // wait for the server cache to refresh
-                    await Task.Delay(REQUEST_BACKOF_DELAY * tryCount);
+                    await Task.Delay(REQUEST_BACKOF_DELAY * oldPageCount);
                     continue;
                 }
                 if (overallUpdateCancle.IsCancellationRequested)

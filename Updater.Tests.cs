@@ -196,6 +196,103 @@ namespace Coflnet.Sky.Updater.Tests
             Assert.That(afterTimeout, Is.EqualTo(update));
         }
 
+        /// <summary>
+        /// Not modified answers and old snapshot pages used one counter, so an old page after many polls slept for the
+        /// count of all polls times 10ms and the new snapshot was missed
+        /// </summary>
+        [Test]
+        public async Task OldSnapshotPageAfterManyPollsBacksOffBriefly()
+        {
+            var updater = new ScriptedPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var script = Enumerable.Range(0, 45).Select(_ => updater.NotModifiedAnswer()).ToList();
+            script.Add(updater.Snapshot(lastUpdate, lastUpdate.AddSeconds(65)));
+            var oldIndex = script.Count - 1;
+            script.Add(updater.Snapshot(lastUpdate.AddSeconds(60), null, CreateAuction(lastUpdate.AddSeconds(30))));
+
+            var result = await updater.Run(lastUpdate.LocalDateTime, script);
+
+            Assert.That(result, Is.EqualTo(lastUpdate.AddSeconds(60).LocalDateTime));
+            Assert.That(updater.Arrivals.Count, Is.EqualTo(script.Count));
+            var wait = updater.Arrivals[oldIndex + 1] - updater.HandedOut[oldIndex];
+            Assert.That(wait, Is.LessThan(TimeSpan.FromMilliseconds(150)));
+        }
+
+        [Test]
+        public async Task OldSnapshotPageAfterMoreThanFiftyPollsDoesNotGiveUp()
+        {
+            var updater = new ScriptedPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var script = Enumerable.Range(0, 55).Select(_ => updater.NotModifiedAnswer()).ToList();
+            script.Add(updater.Snapshot(lastUpdate, lastUpdate.AddSeconds(65)));
+            var newAuction = CreateAuction(lastUpdate.AddSeconds(30));
+            script.Add(updater.Snapshot(lastUpdate.AddSeconds(60), null, newAuction));
+
+            var result = await updater.Run(lastUpdate.LocalDateTime, script);
+
+            Assert.That(result, Is.EqualTo(lastUpdate.AddSeconds(60).LocalDateTime));
+            Assert.That(updater.Found, Is.EqualTo(new[] { newAuction.Uuid }));
+        }
+
+        /// <summary>
+        /// Serves a fixed sequence of answers and notes when each request arrived and when its answer was handed out
+        /// </summary>
+        private class ScriptedPageUpdater : NewUpdater
+        {
+            private List<Func<HttpResponseMessage>> script;
+            private CancellationTokenSource pollToken;
+            private readonly Stopwatch clock = Stopwatch.StartNew();
+            public List<TimeSpan> Arrivals = new();
+            public List<TimeSpan> HandedOut = new();
+            public List<string> Found = new();
+
+            public ScriptedPageUpdater() : base(new ActivitySource("UpdaterTests"), null) { }
+
+            protected override IProducer<string, SaveAuction> GetProducer() => new FakeProducer();
+
+            protected override void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, Activity prodSpan, int count)
+            {
+                Found.Add(auction.Uuid);
+            }
+
+            protected override Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+            {
+                Arrivals.Add(clock.Elapsed);
+                var index = Arrivals.Count - 1;
+                if (index >= script.Count)
+                {
+                    // out of answers, end the poll like its timeout would
+                    pollToken.Cancel();
+                    HandedOut.Add(clock.Elapsed);
+                    return Task.FromResult(NotModified());
+                }
+                var response = script[index]();
+                HandedOut.Add(clock.Elapsed);
+                return Task.FromResult(response);
+            }
+
+            public HttpResponseMessage NotModified() => new(HttpStatusCode.NotModified);
+            public Func<HttpResponseMessage> NotModifiedAnswer() => NotModified;
+
+            public Func<HttpResponseMessage> Snapshot(DateTimeOffset stamp, DateTimeOffset? lastModified, params Auction[] auctions) => () =>
+            {
+                var json = $"{{\"success\":true,\"page\":0,\"totalPages\":1,\"totalAuctions\":{auctions.Length},\"lastUpdated\":{stamp.ToUnixTimeMilliseconds()},\"auctions\":[{string.Join(",", auctions.Select(a => System.Text.Json.JsonSerializer.Serialize(a)))}]}}";
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) };
+                // the code treats a missing date like the missing validator as not modified
+                response.Headers.Date = DateTimeOffset.UtcNow;
+                response.Content.Headers.LastModified = lastModified;
+                return response;
+            };
+
+            public async Task<DateTime> Run(DateTime lastUpdate, List<Func<HttpResponseMessage>> answers)
+            {
+                script = answers;
+                pollToken = new CancellationTokenSource();
+                var result = await GetAndSavePage(0, new FakeProducer(), lastUpdate, new Activity("test"), pollToken, 0);
+                return result.Item1;
+            }
+        }
+
         private class SlowPageUpdater : NewUpdater
         {
             private Func<CancellationTokenSource, HttpResponseMessage> respond;
