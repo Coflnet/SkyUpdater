@@ -21,6 +21,11 @@ public class NewUpdater
 {
     private const int REQUEST_BACKOF_DELAY = 10;
     internal const double PollStartSeconds = 63.9;
+    /// <summary>
+    /// Hypixel lists an auction 20 seconds after it started, so a snapshot also brings auctions that started up to
+    /// 20 seconds before the previous stamp. 25 leaves room for jitter.
+    /// </summary>
+    internal static readonly TimeSpan PublishDelay = TimeSpan.FromSeconds(25);
     protected virtual string ApiBaseUrl => "https://api.hypixel.net";
     private HttpClient httpClient = new HttpClient(new SocketsHttpHandler()
     {
@@ -38,6 +43,7 @@ public class NewUpdater
     /// When the page with the snapshot we currently have finished downloading
     /// </summary>
     private DateTime lastReceived;
+    private readonly SeenAuctions seenAuctions = new();
     private ActivitySource activitySource;
     private Kafka.KafkaCreator kafkaCreator;
     private readonly Gauge firstByteTime = Metrics.CreateGauge("sky_update_first_byte", "Time till first byte");
@@ -263,7 +269,7 @@ public class NewUpdater
                 await foreach (var auction in parser.ReadAuctions().ConfigureAwait(false))
                 {
                     index++;
-                    if (auction.Start < lastUpdate)
+                    if (auction.Start < lastUpdate - PublishDelay || !seenAuctions.FirstSighting(auction.Uuid, pagUpdatedAt))
                     {
                         if (index % 250 == 0)
                         {
@@ -302,6 +308,7 @@ public class NewUpdater
                 pageOneDone.Set((DateTime.UtcNow - pagUpdatedAt).TotalSeconds);
                 // Last-Modified of the cached copy is when the origin finished sending it, up to 7 seconds after the first byte
                 lastReceived = DateTime.Now;
+                seenAuctions.Forget(pagUpdatedAt - TimeSpan.FromMinutes(3));
                 Console.WriteLine($"done: {DateTime.Now.Second}.{DateTime.Now.Millisecond.ToString("000")}");
             }
             LogHeaderName(siteSpan, s, "age");

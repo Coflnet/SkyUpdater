@@ -234,6 +234,47 @@ namespace Coflnet.Sky.Updater.Tests
             Assert.That(updater.Found, Is.EqualTo(new[] { newAuction.Uuid }));
         }
 
+        /// <summary>
+        /// Hypixel lists an auction 20 seconds after it started, so a snapshot brings auctions that started before the
+        /// previous stamp. They were dropped by the start time check and never evaluated.
+        /// </summary>
+        [Test]
+        public async Task AuctionStartedShortlyBeforePreviousStampIsFound()
+        {
+            var updater = new ScriptedPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var late = CreateAuction(lastUpdate.AddSeconds(-15));
+
+            await updater.Run(lastUpdate.LocalDateTime, new() { updater.Snapshot(lastUpdate.AddSeconds(60), null, late) });
+
+            Assert.That(updater.Found, Is.EqualTo(new[] { late.Uuid }));
+        }
+
+        [Test]
+        public async Task AuctionSeenInThePreviousSnapshotIsNotHandedOverAgain()
+        {
+            var updater = new ScriptedPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var late = CreateAuction(lastUpdate.AddSeconds(-15));
+
+            await updater.Run(lastUpdate.LocalDateTime, new() { updater.Snapshot(lastUpdate.AddSeconds(60), null, late) });
+            await updater.Run(lastUpdate.AddSeconds(60).LocalDateTime, new() { updater.Snapshot(lastUpdate.AddSeconds(120), null, late) });
+
+            Assert.That(updater.Found, Is.EqualTo(new[] { late.Uuid }));
+        }
+
+        [Test]
+        public async Task AuctionStartedLongBeforePreviousStampIsNotHandedOver()
+        {
+            var updater = new ScriptedPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var old = CreateAuction(lastUpdate.AddSeconds(-40));
+
+            await updater.Run(lastUpdate.LocalDateTime, new() { updater.Snapshot(lastUpdate.AddSeconds(60), null, old) });
+
+            Assert.That(updater.Found, Is.Empty);
+        }
+
         private class SellsRecordingUpdater : NewUpdater
         {
             public List<List<SaveAuction>> Produced = new();
@@ -359,6 +400,8 @@ namespace Coflnet.Sky.Updater.Tests
             public async Task<DateTime> Run(DateTime lastUpdate, List<Func<HttpResponseMessage>> answers)
             {
                 script = answers;
+                Arrivals.Clear();
+                HandedOut.Clear();
                 pollToken = new CancellationTokenSource();
                 var result = await GetAndSavePage(0, new FakeProducer(), lastUpdate, new Activity("test"), pollToken, 0);
                 return result.Item1;
