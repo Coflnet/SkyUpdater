@@ -35,7 +35,7 @@ public class NewUpdater
         DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
     };
     /// <summary>
-    /// When the response with the snapshot we currently have arrived
+    /// When the page with the snapshot we currently have finished downloading
     /// </summary>
     private DateTime lastReceived;
     private ActivitySource activitySource;
@@ -223,6 +223,8 @@ public class NewUpdater
                 page._lastUpdated = await parser.ReadLastUpdated().ConfigureAwait(false);
                 if (page.LastUpdated <= lastUpdate)
                 {
+                    // cloudflare stored the snapshot we already have again, only ask for copies newer than this one
+                    minModTime = NewerValidator(minModTime, s.Content.Headers.LastModified, lastUpdate);
                     tryCount++;
                     if (tryCount > 50)
                     {
@@ -241,7 +243,6 @@ public class NewUpdater
                     return (lastUpdate, 0);
                 }
                 overallUpdateCancle.Cancel();
-                lastReceived = intermediate;
                 var pagUpdatedAt = page.LastUpdated;
                 await foreach (var auction in parser.ReadAuctions().ConfigureAwait(false))
                 {
@@ -283,6 +284,8 @@ public class NewUpdater
                     count++;
                 }
                 pageOneDone.Set((DateTime.UtcNow - pagUpdatedAt).TotalSeconds);
+                // Last-Modified of the cached copy is when the origin finished sending it, up to 7 seconds after the first byte
+                lastReceived = DateTime.Now;
                 Console.WriteLine($"done: {DateTime.Now.Second}.{DateTime.Now.Millisecond.ToString("000")}");
             }
             LogHeaderName(siteSpan, s, "age");
@@ -299,9 +302,9 @@ public class NewUpdater
     }
 
     /// <summary>
-    /// The If-Modified-Since value for the next poll: one second after the previous update was received.
-    /// Cloudflare reports the time it fetched a snapshot as Last-Modified. The copy we already have was fetched
-    /// before we received it and answers 304, the next snapshot is fetched a minute later and always passes.
+    /// The If-Modified-Since value for the next poll: one second after the previous update finished downloading.
+    /// Cloudflare reports the time it stored a snapshot as Last-Modified. The copy we already have was stored
+    /// by the time we had all of it and answers 304, the next snapshot is fetched a minute later and always passes.
     /// A fixed offset from the stamp answers 304 for the whole minute whenever the next snapshot is fetched within that offset.
     /// </summary>
     internal static DateTimeOffset GetMinModifiedTime(DateTime lastUpdate, DateTime lastReceived)
@@ -312,6 +315,19 @@ public class NewUpdater
         // the next snapshot is stamped 60 seconds later and can not be fetched before that
         var beforeNextStamp = lastUpdate + TimeSpan.FromSeconds(59);
         return new DateTimeOffset(afterReceive < beforeNextStamp ? afterReceive : beforeNextStamp);
+    }
+
+    /// <summary>
+    /// A copy of the snapshot we already have that was stored later than <see cref="GetMinModifiedTime"/> assumed answers 200
+    /// with the full page on every poll. Its own Last-Modified becomes the new If-Modified-Since so the next polls get a 304 again.
+    /// Never later than a second before the next stamp, otherwise the next snapshot could answer 304 as well.
+    /// </summary>
+    internal static DateTimeOffset NewerValidator(DateTimeOffset current, DateTimeOffset? lastModifiedOfOldCopy, DateTime lastUpdate)
+    {
+        if (lastModifiedOfOldCopy == null || lastModifiedOfOldCopy <= current)
+            return current;
+        var beforeNextStamp = new DateTimeOffset(lastUpdate + TimeSpan.FromSeconds(59));
+        return lastModifiedOfOldCopy < beforeNextStamp ? lastModifiedOfOldCopy.Value : beforeNextStamp;
     }
 
     /// <summary>

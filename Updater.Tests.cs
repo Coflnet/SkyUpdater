@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Coflnet.Sky.Core;
@@ -125,6 +128,166 @@ namespace Coflnet.Sky.Updater.Tests
             var stamp = new DateTime(2026, 10, 12, 11, 25, 6, 275, DateTimeKind.Utc);
 
             Assert.That(NewUpdater.GetMinModifiedTime(stamp, default).UtcDateTime, Is.EqualTo(stamp.AddSeconds(1)));
+        }
+
+        /// <summary>
+        /// Seen after the first rollout: the page takes up to 7 seconds to arrive and cloudflare stamps the cached copy when it is complete.
+        /// With the time of the first byte as reference every poll of the next minute got the full old page instead of a 304
+        /// </summary>
+        [TestCase(0.8)]
+        [TestCase(2.7)]
+        [TestCase(7.2)]
+        public void CopyStoredWhenThePageWasCompleteIsAnsweredAsNotModified(double downloadSeconds)
+        {
+            var stamp = new DateTime(2026, 10, 12, 13, 37, 6, 275, DateTimeKind.Utc);
+            var finished = stamp.AddSeconds(5.1 + downloadSeconds);
+
+            Assert.That(HttpDate(new DateTimeOffset(finished)), Is.LessThanOrEqualTo(HttpDate(NewUpdater.GetMinModifiedTime(stamp, finished))));
+        }
+
+        [Test]
+        public void OldCopyStoredLaterBecomesTheValidator()
+        {
+            var stamp = new DateTime(2026, 10, 12, 13, 37, 6, 275, DateTimeKind.Utc);
+            var current = NewUpdater.GetMinModifiedTime(stamp, stamp.AddSeconds(5.1));
+            var storedAgain = new DateTimeOffset(stamp.AddSeconds(21));
+
+            var validator = NewUpdater.NewerValidator(current, storedAgain, stamp);
+
+            Assert.That(validator, Is.EqualTo(storedAgain));
+            // an older or missing header keeps what we had
+            Assert.That(NewUpdater.NewerValidator(validator, new DateTimeOffset(stamp.AddSeconds(8)), stamp), Is.EqualTo(validator));
+            Assert.That(NewUpdater.NewerValidator(validator, null, stamp), Is.EqualTo(validator));
+        }
+
+        [Test]
+        public void ValidatorOfAnOldCopyNeverReachesTheNextSnapshot()
+        {
+            var stamp = new DateTime(2026, 10, 12, 13, 37, 6, 275, DateTimeKind.Utc);
+            var current = NewUpdater.GetMinModifiedTime(stamp, stamp.AddSeconds(5.1));
+            // the old snapshot was stored again in the same second the next one gets fetched
+            var storedAgain = new DateTimeOffset(stamp.AddSeconds(64.1));
+            var nextLastModified = HttpDate(new DateTimeOffset(stamp.AddSeconds(64.6)));
+
+            var validator = NewUpdater.NewerValidator(current, storedAgain, stamp);
+
+            Assert.That(nextLastModified, Is.GreaterThan(HttpDate(validator)));
+        }
+
+        /// <summary>
+        /// The first rollout took the arrival of the first byte as the time the update was received. The page streams for
+        /// seconds and the cached copy is stamped at its end, so the next minute got the full old page on every poll
+        /// </summary>
+        [Test]
+        public async Task NextPollAsksForNewerThanTheEndOfThePreviousDownload()
+        {
+            var updater = new SlowPageUpdater();
+            var stamp = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 5000);
+
+            var update = await updater.Download(stamp, TimeSpan.FromSeconds(2.2));
+            var finished = DateTimeOffset.UtcNow;
+            Assert.That(update, Is.EqualTo(stamp.LocalDateTime));
+
+            var afterTimeout = await updater.PollWithoutNewPage(update);
+
+            Assert.That(updater.IfModifiedSince, Is.GreaterThanOrEqualTo(finished));
+            Assert.That(updater.IfModifiedSince, Is.LessThan(finished.AddSeconds(2)));
+            // a poll that ends without a page keeps the last update
+            Assert.That(afterTimeout, Is.EqualTo(update));
+        }
+
+        private class SlowPageUpdater : NewUpdater
+        {
+            private Func<CancellationTokenSource, HttpResponseMessage> respond;
+            private CancellationTokenSource pollToken;
+            public DateTimeOffset? IfModifiedSince;
+
+            public SlowPageUpdater() : base(new ActivitySource("UpdaterTests"), null) { }
+
+            protected override IProducer<string, SaveAuction> GetProducer() => new FakeProducer();
+
+            protected override Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+            {
+                IfModifiedSince = message.Headers.IfModifiedSince;
+                return Task.FromResult(respond(pollToken));
+            }
+
+            public async Task<DateTime> Download(DateTimeOffset stamp, TimeSpan downloadTime)
+            {
+                var head = System.Text.Encoding.UTF8.GetBytes($"{{\"success\":true,\"page\":0,\"totalPages\":1,\"totalAuctions\":0,\"lastUpdated\":{stamp.ToUnixTimeMilliseconds()},\"auctions\":[");
+                var tail = System.Text.Encoding.UTF8.GetBytes("]}");
+                respond = _ =>
+                {
+                    var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new SlowStream(head, tail, downloadTime)) };
+                    response.Headers.Date = DateTimeOffset.UtcNow;
+                    return response;
+                };
+                return await Poll(stamp.LocalDateTime.AddSeconds(-60));
+            }
+
+            public async Task<DateTime> PollWithoutNewPage(DateTime lastUpdate)
+            {
+                respond = token =>
+                {
+                    // one answer is enough, end the poll like its timeout would
+                    token.Cancel();
+                    return new HttpResponseMessage(HttpStatusCode.NotModified);
+                };
+                return await Poll(lastUpdate);
+            }
+
+            private async Task<DateTime> Poll(DateTime lastUpdate)
+            {
+                pollToken = new CancellationTokenSource();
+                var result = await GetAndSavePage(0, new FakeProducer(), lastUpdate, new Activity("test"), pollToken, 0);
+                return result.Item1;
+            }
+
+            /// <summary>
+            /// Hands out the start of the page at once and the rest after a delay, like a page still being sent by the origin
+            /// </summary>
+            private class SlowStream : Stream
+            {
+                private readonly byte[] head;
+                private readonly byte[] tail;
+                private readonly TimeSpan delay;
+                private int step;
+
+                public SlowStream(byte[] head, byte[] tail, TimeSpan delay)
+                {
+                    this.head = head;
+                    this.tail = tail;
+                    this.delay = delay;
+                }
+
+                public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+                {
+                    step++;
+                    if (step == 1)
+                    {
+                        head.CopyTo(buffer);
+                        return head.Length;
+                    }
+                    if (step == 2)
+                    {
+                        await Task.Delay(delay, cancellationToken);
+                        tail.CopyTo(buffer);
+                        return tail.Length;
+                    }
+                    return 0;
+                }
+
+                public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().Result;
+                public override bool CanRead => true;
+                public override bool CanSeek => false;
+                public override bool CanWrite => false;
+                public override long Length => throw new NotSupportedException();
+                public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+                public override void Flush() { }
+                public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+                public override void SetLength(long value) => throw new NotSupportedException();
+                public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            }
         }
 
         [Test]
