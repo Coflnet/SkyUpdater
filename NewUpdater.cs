@@ -102,8 +102,7 @@ public class NewUpdater
 
                 Updater.lastUpdateDone = lastUpdate;
                 await Task.Delay(800);
-                var binupdate = await BinUpdater.DownloadSells(ApiBaseUrl).ConfigureAwait(false);
-                ProduceSells(binupdate);
+                await UpdateSells(BinUpdater.DownloadSells(ApiBaseUrl), lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now).ConfigureAwait(false);
                 var tookTime = lastUpdate + TimeSpan.FromSeconds(60) - DateTime.Now;
                 Console.WriteLine($"sleeping till {lastUpdate + TimeSpan.FromSeconds(60)} " + tookTime);
                 await Task.Delay(tookTime < TimeSpan.Zero ? TimeSpan.FromMilliseconds(500) : tookTime);
@@ -122,6 +121,21 @@ public class NewUpdater
         var pageToken = new CancellationTokenSource(20000);
         var result = await GetAndSavePage(page, p, lastUpdate, siteSpan, pageToken, 0);
         return result.Item1;
+    }
+
+    internal async Task<bool> UpdateSells(Task<List<SaveAuction>> download, TimeSpan timeLeft)
+    {
+        if (timeLeft < TimeSpan.Zero)
+            timeLeft = TimeSpan.Zero;
+        if (await Task.WhenAny(download, Task.Delay(timeLeft)).ConfigureAwait(false) != download)
+        {
+            Console.WriteLine("sold auctions took too long, continuing with the next update");
+            // observe the exception of the abandoned download
+            _ = download.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            return false;
+        }
+        ProduceSells(await download.ConfigureAwait(false));
+        return true;
     }
 
     protected virtual void ProduceSells(List<SaveAuction> binupdate)

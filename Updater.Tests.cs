@@ -234,6 +234,78 @@ namespace Coflnet.Sky.Updater.Tests
             Assert.That(updater.Found, Is.EqualTo(new[] { newAuction.Uuid }));
         }
 
+        private class SellsRecordingUpdater : NewUpdater
+        {
+            public List<List<SaveAuction>> Produced = new();
+            public SellsRecordingUpdater() : base(new ActivitySource("UpdaterTests"), null) { }
+            protected override void ProduceSells(List<SaveAuction> binupdate) => Produced.Add(binupdate);
+            public Task<bool> Call(Task<List<SaveAuction>> download, TimeSpan timeLeft) => UpdateSells(download, timeLeft);
+        }
+
+        [Test]
+        public async Task HangingSoldAuctionsDownloadDoesNotHoldUpTheLoop()
+        {
+            var updater = new SellsRecordingUpdater();
+            var hanging = new TaskCompletionSource<List<SaveAuction>>();
+            var unobserved = new List<Exception>();
+            EventHandler<UnobservedTaskExceptionEventArgs> handler = (_, e) => unobserved.Add(e.Exception);
+            TaskScheduler.UnobservedTaskException += handler;
+            try
+            {
+                var watch = Stopwatch.StartNew();
+                var produced = await updater.Call(hanging.Task, TimeSpan.FromMilliseconds(100));
+                Assert.That(produced, Is.False);
+                Assert.That(watch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(1)));
+                Assert.That(updater.Produced, Is.Empty);
+
+                hanging.SetException(new InvalidOperationException("late failure"));
+                await Task.Delay(100);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Assert.That(unobserved, Is.Empty);
+            }
+            finally
+            {
+                TaskScheduler.UnobservedTaskException -= handler;
+            }
+        }
+
+        [Test]
+        public async Task SoldAuctionsInTimeAreProduced()
+        {
+            var updater = new SellsRecordingUpdater();
+            var download = Task.Run(async () =>
+            {
+                await Task.Delay(20);
+                return new List<SaveAuction> { new() { Uuid = "a" }, new() { Uuid = "b" } };
+            });
+            var produced = await updater.Call(download, TimeSpan.FromSeconds(2));
+            Assert.That(produced, Is.True);
+            Assert.That(updater.Produced.Single().Select(a => a.Uuid), Is.EqualTo(new[] { "a", "b" }));
+        }
+
+        [Test]
+        public async Task SoldAuctionsAfterALateSnapshotAreSkippedAtOnce()
+        {
+            var updater = new SellsRecordingUpdater();
+            var watch = Stopwatch.StartNew();
+            var produced = await updater.Call(new TaskCompletionSource<List<SaveAuction>>().Task, TimeSpan.FromSeconds(-5));
+            Assert.That(produced, Is.False);
+            Assert.That(watch.Elapsed, Is.LessThan(TimeSpan.FromMilliseconds(200)));
+            Assert.That(updater.Produced, Is.Empty);
+        }
+
+        [Test]
+        public void FailingSoldAuctionsDownloadStillThrows()
+        {
+            var updater = new SellsRecordingUpdater();
+            var failing = Task.FromException<List<SaveAuction>>(new ArgumentNullException("content"));
+            Assert.ThrowsAsync<ArgumentNullException>(() => updater.Call(failing, TimeSpan.FromSeconds(2)));
+            Assert.That(updater.Produced, Is.Empty);
+        }
+
         /// <summary>
         /// Serves a fixed sequence of answers and notes when each request arrived and when its answer was handed out
         /// </summary>
