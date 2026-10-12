@@ -601,7 +601,13 @@ namespace Coflnet.Sky.Updater
 
             try
             {
-                p.Produce(targetTopic, new Message<string, SaveAuction> { Value = item, Key = $"{item.UId.ToString()}{item.Bids.Count}{item.End}" }, r =>
+                var key = targetTopic == SoldAuctionsTopic
+                    ? item.FlatenedNBT?.GetValueOrDefault("uuid") ?? item.Uuid
+                    : $"{item.UId.ToString()}{item.Bids.Count}{item.End}";
+                var message = new Message<string, SaveAuction> { Value = item, Key = key };
+                if (targetTopic == SoldAuctionsTopic)
+                    message.Headers = new Headers { { "deduplication-key", System.Text.Encoding.UTF8.GetBytes(item.Uuid) } };
+                p.Produce(targetTopic, message, r =>
                 {
                     if (r.Error.IsError || r.TopicPartitionOffset.Offset % 1000 == 10)
                         Console.WriteLine(!r.Error.IsError ?

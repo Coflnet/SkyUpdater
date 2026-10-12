@@ -20,6 +20,7 @@ namespace Coflnet.Sky.Updater;
 public class NewUpdater
 {
     private const int REQUEST_BACKOF_DELAY = 10;
+    internal const double PollStartSeconds = 63.9;
     protected virtual string ApiBaseUrl => "https://api.hypixel.net";
     private HttpClient httpClient = new HttpClient(new SocketsHttpHandler()
     {
@@ -33,6 +34,10 @@ public class NewUpdater
         DefaultRequestVersion = System.Net.HttpVersion.Version20,
         DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
     };
+    /// <summary>
+    /// When the response with the snapshot we currently have arrived
+    /// </summary>
+    private DateTime lastReceived;
     private ActivitySource activitySource;
     private Kafka.KafkaCreator kafkaCreator;
     private readonly Gauge firstByteTime = Metrics.CreateGauge("sky_update_first_byte", "Time till first byte");
@@ -61,7 +66,7 @@ public class NewUpdater
                 var page = 0;
                 try
                 {
-                    var waitTime = lastUpdate + TimeSpan.FromSeconds(64.9) - DateTime.Now;
+                    var waitTime = lastUpdate + TimeSpan.FromSeconds(PollStartSeconds) - DateTime.Now;
                     if (waitTime < TimeSpan.FromSeconds(0))
                         waitTime = TimeSpan.FromSeconds(0);
                     await Task.Delay(waitTime);
@@ -124,7 +129,7 @@ public class NewUpdater
         using var p = GetProducer();
         foreach (var item in binupdate)
         {
-            p.Produce(Updater.SoldAuctionsTopic, new Message<string, SaveAuction> { Key = item.Uuid, Value = item });
+            Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, p, item, null);
         }
         p.Flush(TimeSpan.FromSeconds(30));
     }
@@ -152,10 +157,10 @@ public class NewUpdater
             overallUpdateCancle = pageUpdate;
         var start = DateTime.Now;
         var dnsName = System.Net.Dns.GetHostName();
+        var minModTime = GetMinModifiedTime(lastUpdate, lastReceived);
         while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
         {
             var downloadStart = DateTime.Now;
-            var minModTime = new DateTimeOffset(lastUpdate) + TimeSpan.FromSeconds(64);
             //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
             var url = ApiBaseUrl + "/v2/skyblock/auctions";
             if (iter >= 1 || pageId != 0)
@@ -236,6 +241,7 @@ public class NewUpdater
                     return (lastUpdate, 0);
                 }
                 overallUpdateCancle.Cancel();
+                lastReceived = intermediate;
                 var pagUpdatedAt = page.LastUpdated;
                 await foreach (var auction in parser.ReadAuctions().ConfigureAwait(false))
                 {
@@ -289,7 +295,32 @@ public class NewUpdater
             Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}");
             UpdateDone();
         }
-        return (page.LastUpdated, age);
+        return (LatestUpdate(page.LastUpdated, lastUpdate), age);
+    }
+
+    /// <summary>
+    /// The If-Modified-Since value for the next poll: one second after the previous update was received.
+    /// Cloudflare reports the time it fetched a snapshot as Last-Modified. The copy we already have was fetched
+    /// before we received it and answers 304, the next snapshot is fetched a minute later and always passes.
+    /// A fixed offset from the stamp answers 304 for the whole minute whenever the next snapshot is fetched within that offset.
+    /// </summary>
+    internal static DateTimeOffset GetMinModifiedTime(DateTime lastUpdate, DateTime lastReceived)
+    {
+        // nothing received for this stamp yet (startup)
+        var received = lastReceived < lastUpdate ? lastUpdate : lastReceived;
+        var afterReceive = received + TimeSpan.FromSeconds(1);
+        // the next snapshot is stamped 60 seconds later and can not be fetched before that
+        var beforeNextStamp = lastUpdate + TimeSpan.FromSeconds(59);
+        return new DateTimeOffset(afterReceive < beforeNextStamp ? afterReceive : beforeNextStamp);
+    }
+
+    /// <summary>
+    /// A poll that ran into its timeout has no page and must not move the last update back to 1970,
+    /// that would report the complete first page as new on the next run
+    /// </summary>
+    internal static DateTime LatestUpdate(DateTime pageUpdated, DateTime lastUpdate)
+    {
+        return pageUpdated > lastUpdate ? pageUpdated : lastUpdate;
     }
 
     protected virtual void UpdateDone()

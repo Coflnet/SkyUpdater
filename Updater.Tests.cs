@@ -20,6 +20,129 @@ namespace Coflnet.Sky.Updater.Tests
             Assert.That("Thu, 20 Jan 2022 20:00:00 GMT", Is.EqualTo(Updater.FormatTime(new System.DateTime(2022, 1, 20, 20, 0, 0, System.DateTimeKind.Utc))));
         }
 
+        [Test]
+        public void RepeatSalesUseItemUuidAcrossProducerPaths()
+        {
+            var updater = new TestUpdater(null);
+            var itemUuid = Guid.NewGuid().ToString();
+            var first = new SaveAuction
+            {
+                Uuid = Guid.NewGuid().ToString("N"),
+                End = DateTime.UtcNow.AddMinutes(-1),
+                FlatenedNBT = new() { { "uuid", itemUuid } }
+            };
+            var second = new SaveAuction
+            {
+                Uuid = Guid.NewGuid().ToString("N"),
+                End = DateTime.UtcNow,
+                FlatenedNBT = new() { { "uuid", itemUuid } }
+            };
+
+            updater.PublishSells(new() { first, second });
+            Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, updater.producer, second, null);
+
+            Assert.That(updater.producer.Messages.Select(m => m.Key), Is.EqualTo(new[] { itemUuid, itemUuid, itemUuid }));
+            Assert.That(updater.producer.Messages.Select(m => m.Auction), Is.EqualTo(new[] { first, second, second }));
+            Assert.That(updater.producer.Messages.Select(m => System.Text.Encoding.UTF8.GetString(m.Headers.GetLastBytes("deduplication-key"))),
+                Is.EqualTo(new[] { first.Uuid, second.Uuid, second.Uuid }));
+        }
+
+        [Test]
+        public void SoldAuctionWithoutItemUuidUsesAuctionUuid()
+        {
+            var updater = new TestUpdater(null);
+            var auction = new SaveAuction { Uuid = Guid.NewGuid().ToString("N"), FlatenedNBT = new() };
+
+            updater.PublishSells(new() { auction });
+            Updater.ProduceIntoTopic(Updater.SoldAuctionsTopic, updater.producer, auction, null);
+
+            Assert.That(updater.producer.Messages.Select(m => m.Key), Is.EqualTo(new[] { auction.Uuid, auction.Uuid }));
+        }
+
+        [Test]
+        public void BidsKeepDistinctKeysWithoutDeduplicationHeader()
+        {
+            var producer = new FakeProducer();
+            var auction = new SaveAuction
+            {
+                Uuid = Guid.NewGuid().ToString("N"),
+                End = DateTime.UtcNow,
+                Bids = new(),
+                FlatenedNBT = new() { { "uuid", Guid.NewGuid().ToString() } }
+            };
+            Updater.ProduceIntoTopic(Updater.NewBidsTopic, producer, auction, null);
+            auction.Bids.Add(new SaveBids());
+            Updater.ProduceIntoTopic(Updater.NewBidsTopic, producer, auction, null);
+
+            Assert.That(producer.Messages.Select(m => m.Key).Distinct().Count(), Is.EqualTo(2));
+            Assert.That(producer.Messages.All(m => m.Headers == null), Is.True);
+        }
+
+        [Test]
+        public void IfModifiedSinceIsOneSecondAfterThePreviousUpdateWasReceived()
+        {
+            var stamp = new DateTime(2026, 10, 12, 11, 25, 6, 275, DateTimeKind.Utc);
+            var received = stamp.AddSeconds(4.9);
+
+            Assert.That(NewUpdater.GetMinModifiedTime(stamp, received).UtcDateTime, Is.EqualTo(received.AddSeconds(1)));
+        }
+
+        /// <summary>
+        /// The header used to be the stamp plus 64 seconds. Cloudflare sets Last-Modified to the second it fetched the snapshot,
+        /// so every snapshot fetched less than 64.7 seconds after the previous stamp answered 304 until the poll timed out
+        /// </summary>
+        [TestCase(4.2)]
+        [TestCase(4.5)]
+        [TestCase(4.9)]
+        [TestCase(5.6)]
+        [TestCase(15)]
+        public void NextSnapshotIsNeverAnsweredAsNotModified(double fetchedAfterStamp)
+        {
+            var stamp = new DateTime(2026, 10, 12, 11, 25, 6, 275, DateTimeKind.Utc);
+            foreach (var receivedAfterStamp in new[] { 4.2, 4.9, 5.6, 15, 28.3, 58, 64.9, 120 })
+            {
+                var ifModifiedSince = HttpDate(NewUpdater.GetMinModifiedTime(stamp, stamp.AddSeconds(receivedAfterStamp)));
+                var nextLastModified = HttpDate(new DateTimeOffset(stamp.AddSeconds(60 + fetchedAfterStamp)));
+
+                // the server answers 304 when Last-Modified is not later than If-Modified-Since
+                Assert.That(nextLastModified, Is.GreaterThan(ifModifiedSince), $"received {receivedAfterStamp}s after the stamp");
+            }
+        }
+
+        [Test]
+        public void SnapshotWeAlreadyHaveIsAnsweredAsNotModified()
+        {
+            var stamp = new DateTime(2026, 10, 12, 11, 25, 6, 275, DateTimeKind.Utc);
+            // fetched by cloudflare at the latest when we received it
+            var received = stamp.AddSeconds(4.9);
+
+            Assert.That(HttpDate(new DateTimeOffset(received)), Is.LessThanOrEqualTo(HttpDate(NewUpdater.GetMinModifiedTime(stamp, received))));
+        }
+
+        [Test]
+        public void IfModifiedSinceFallsBackToTheStampWhenNothingWasReceived()
+        {
+            var stamp = new DateTime(2026, 10, 12, 11, 25, 6, 275, DateTimeKind.Utc);
+
+            Assert.That(NewUpdater.GetMinModifiedTime(stamp, default).UtcDateTime, Is.EqualTo(stamp.AddSeconds(1)));
+        }
+
+        [Test]
+        public void TimedOutPollKeepsTheLastUpdate()
+        {
+            var lastUpdate = new DateTime(2026, 10, 12, 11, 25, 6, 275, DateTimeKind.Utc).ToLocalTime();
+            // no page arrived, the page reports the unix epoch
+            var emptyPage = new AuctionPage().LastUpdated;
+
+            Assert.That(NewUpdater.LatestUpdate(emptyPage, lastUpdate), Is.EqualTo(lastUpdate));
+            Assert.That(NewUpdater.LatestUpdate(lastUpdate.AddSeconds(60), lastUpdate), Is.EqualTo(lastUpdate.AddSeconds(60)));
+        }
+
+        /// <summary>
+        /// Http dates have second resolution
+        /// </summary>
+        private static DateTimeOffset HttpDate(DateTimeOffset time) => DateTimeOffset.Parse(time.ToString("r"));
+
         [TestCase(1)]
         [TestCase(2)]
         [TestCase(3)]
@@ -129,6 +252,10 @@ namespace Coflnet.Sky.Updater.Tests
             {
             }
 
+            protected override IProducer<string, SaveAuction> GetProducer() => producer;
+
+            public void PublishSells(List<SaveAuction> auctions) => ProduceSells(auctions);
+
             public async Task DoAnUpdate()
             {
 
@@ -139,7 +266,7 @@ namespace Coflnet.Sky.Updater.Tests
         public class FakeProducer : Confluent.Kafka.IProducer<string, Core.SaveAuction>
         {
             public SaveAuction lastAuction;
-            public List<(string Topic, SaveAuction Auction)> Messages = new();
+            public List<(string Topic, SaveAuction Auction, string Key, Headers Headers)> Messages = new();
             public Handle Handle => throw new NotImplementedException();
 
             public string Name => throw new NotImplementedException();
@@ -176,7 +303,6 @@ namespace Coflnet.Sky.Updater.Tests
 
             public void Dispose()
             {
-                throw new NotImplementedException();
             }
 
             public int Flush(TimeSpan timeout)
@@ -202,7 +328,7 @@ namespace Coflnet.Sky.Updater.Tests
             public void Produce(string topic, Message<string, SaveAuction> message, Action<DeliveryReport<string, SaveAuction>> deliveryHandler = null)
             {
                 lastAuction = message.Value;
-                Messages.Add((topic, message.Value));
+                Messages.Add((topic, message.Value, message.Key, message.Headers));
                 Console.WriteLine("Produced: " + message.Value.Uuid);
             }
 
