@@ -368,7 +368,7 @@ namespace Coflnet.Sky.Updater.Tests
                 Found.Add(auction.Uuid);
             }
 
-            protected override Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+            protected override Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message, HttpClient client)
             {
                 Arrivals.Add(clock.Elapsed);
                 var index = Arrivals.Count - 1;
@@ -418,7 +418,7 @@ namespace Coflnet.Sky.Updater.Tests
 
             protected override IProducer<string, SaveAuction> GetProducer() => new FakeProducer();
 
-            protected override Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+            protected override Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message, HttpClient client)
             {
                 IfModifiedSince = message.Headers.IfModifiedSince;
                 return Task.FromResult(respond(pollToken));
@@ -512,6 +512,14 @@ namespace Coflnet.Sky.Updater.Tests
             private readonly Stopwatch clock = Stopwatch.StartNew();
             public readonly System.Collections.Concurrent.ConcurrentQueue<(string uuid, TimeSpan at)> Found = new();
             public int Requests;
+            public PageConnections Mode = PageConnections.Shared;
+            /// <summary>
+            /// The client each request was sent with, by download id (the id is in the url: none, page only or page with t)
+            /// </summary>
+            public readonly System.Collections.Concurrent.ConcurrentQueue<(string url, HttpClient client)> Clients = new();
+
+            private protected override PageConnections Connections => Mode;
+            public PageRace StartRace() => NewRace();
 
             public RacingPageUpdater() : base(new ActivitySource("UpdaterTests"), null) { }
 
@@ -561,12 +569,13 @@ namespace Coflnet.Sky.Updater.Tests
 
             public Task<(DateTime, int)[]> Await(NewUpdater.PageRace race, params Task<(DateTime, int)>[] downloads) => AwaitRace(race, downloads);
 
-            protected override async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+            protected override async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message, HttpClient client)
             {
                 (TimeSpan headerDelay, (byte[] data, TimeSpan delay)[] chunks) body;
                 lock (bodies)
                 {
                     Requests++;
+                    Clients.Enqueue((message.RequestUri.ToString(), client));
                     if (!bodies.TryDequeue(out body))
                         throw new InvalidOperationException("more requests than scripted bodies");
                 }
@@ -725,6 +734,114 @@ namespace Coflnet.Sky.Updater.Tests
             Assert.That(updater.Requests, Is.EqualTo(1));
             // everything came from the first body, in its order
             Assert.That(updater.Found.Select(f => f.uuid), Is.EqualTo(new[] { x.Uuid, y.Uuid }));
+        }
+
+        /// <summary>
+        /// Runs one round of three downloads that each see the new snapshot, returns the race
+        /// </summary>
+        private static async Task<NewUpdater.PageRace> RunThreeDownloads(RacingPageUpdater updater, DateTimeOffset lastUpdate, TimeSpan pause)
+        {
+            var stamp = lastUpdate.AddSeconds(60);
+            var x = CreateAuction(lastUpdate);
+            var y = CreateAuction(lastUpdate);
+            for (var i = 0; i < 3; i++)
+                updater.AddBody(TimeSpan.Zero, stamp, new[] { x }, pause, new[] { y });
+            var round = new CancellationTokenSource(20000);
+            var race = updater.StartRace();
+            await updater.Await(race,
+                updater.Download(lastUpdate.LocalDateTime, round, 0, race),
+                updater.Download(lastUpdate.LocalDateTime, round, 1, race),
+                updater.Download(lastUpdate.LocalDateTime, round, 2, race));
+            return race;
+        }
+
+        private static DateTimeOffset RecentStamp() => DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+
+        [Test]
+        public async Task OwnConnectionsGiveEveryDownloadItsOwnClientAndKeepItBetweenRounds()
+        {
+            var updater = new RacingPageUpdater { Mode = NewUpdater.PageConnections.Separate };
+            var first = RecentStamp();
+
+            var race = await RunThreeDownloads(updater, first, TimeSpan.FromMilliseconds(600));
+            var firstRound = updater.Clients.ToList();
+            await RunThreeDownloads(updater, first.AddSeconds(60), TimeSpan.FromMilliseconds(600));
+            var secondRound = updater.Clients.Skip(3).ToList();
+
+            Assert.That(race.OwnConnections, Is.True);
+            Assert.That(firstRound.Select(c => c.client).Distinct().Count(), Is.EqualTo(3));
+            Assert.That(secondRound.Select(c => c.client), Is.EqualTo(firstRound.Select(c => c.client)));
+        }
+
+        [Test]
+        public async Task SharedConnectionsUseOneClientForAllDownloads()
+        {
+            var updater = new RacingPageUpdater { Mode = NewUpdater.PageConnections.Shared };
+
+            var race = await RunThreeDownloads(updater, RecentStamp(), TimeSpan.FromMilliseconds(600));
+
+            Assert.That(race.OwnConnections, Is.False);
+            Assert.That(updater.Clients.Count, Is.EqualTo(3));
+            Assert.That(updater.Clients.Select(c => c.client).Distinct().Count(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task SharedClientIsNotAnOwnClient()
+        {
+            var updater = new RacingPageUpdater { Mode = NewUpdater.PageConnections.Shared };
+            await RunThreeDownloads(updater, RecentStamp(), TimeSpan.FromMilliseconds(600));
+            var shared = updater.Clients.First().client;
+            updater.Mode = NewUpdater.PageConnections.Separate;
+
+            await RunThreeDownloads(updater, RecentStamp().AddSeconds(60), TimeSpan.FromMilliseconds(600));
+
+            Assert.That(updater.Clients.Skip(3).Select(c => c.client), Does.Not.Contain(shared));
+        }
+
+        [Test]
+        public void ConnectionModeDecidesByMinute()
+        {
+            var odd = new DateTime(2026, 10, 12, 11, 25, 6, DateTimeKind.Utc);
+            var even = new DateTime(2026, 10, 12, 11, 26, 6, DateTimeKind.Utc);
+
+            Assert.That(NewUpdater.UsesOwnConnections(NewUpdater.PageConnections.Separate, even), Is.True);
+            Assert.That(NewUpdater.UsesOwnConnections(NewUpdater.PageConnections.Shared, odd), Is.False);
+            Assert.That(NewUpdater.UsesOwnConnections(NewUpdater.PageConnections.Alternate, odd), Is.True);
+            Assert.That(NewUpdater.UsesOwnConnections(NewUpdater.PageConnections.Alternate, even), Is.False);
+        }
+
+        [TestCase("separate", "Separate")]
+        [TestCase("SHARED", "Shared")]
+        [TestCase("alternate", "Alternate")]
+        [TestCase("", "Alternate")]
+        [TestCase(null, "Alternate")]
+        [TestCase("nonsense", "Alternate")]
+        [TestCase("7", "Alternate")]
+        public void ConnectionModeIsParsedFromTheEnvironmentValue(string value, string expected)
+        {
+            Assert.That(NewUpdater.ParseConnections(value), Is.EqualTo(Enum.Parse<NewUpdater.PageConnections>(expected)));
+        }
+
+        [Test]
+        public async Task RaceReportsWallAndCpuTimeOfTheBodyWindow()
+        {
+            var updater = new RacingPageUpdater();
+
+            var race = await RunThreeDownloads(updater, RecentStamp(), TimeSpan.FromMilliseconds(100));
+
+            Assert.That(race.BodyWall, Is.GreaterThan(TimeSpan.Zero));
+            Assert.That(race.BodyCpu, Is.GreaterThanOrEqualTo(TimeSpan.Zero));
+            Assert.That(race.BodyGcPause, Is.GreaterThanOrEqualTo(TimeSpan.Zero));
+        }
+
+        [Test]
+        public void RaceWithoutHandOverReportsZero()
+        {
+            var race = new NewUpdater.PageRace();
+
+            Assert.That(race.BodyWall, Is.EqualTo(TimeSpan.Zero));
+            Assert.That(race.BodyCpu, Is.EqualTo(TimeSpan.Zero));
+            Assert.That(race.BodyGcPause, Is.EqualTo(TimeSpan.Zero));
         }
 
         [Test]

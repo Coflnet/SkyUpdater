@@ -27,18 +27,58 @@ public class NewUpdater
     /// </summary>
     internal static readonly TimeSpan PublishDelay = TimeSpan.FromSeconds(25);
     protected virtual string ApiBaseUrl => "https://api.hypixel.net";
-    private HttpClient httpClient = new HttpClient(new SocketsHttpHandler()
+    private readonly HttpClient httpClient = CreatePageClient();
+    /// <summary>
+    /// One client (and with it one connection) per download id, kept so the connection stays pooled between rounds
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, HttpClient> ownClients = new();
+    // Alternate is the measurement setting: rounds alternate so shared and separate connections can be compared
+    // on the same pods, to be fixed to one value once measured
+    private static readonly PageConnections configuredConnections = ParseConnections(Environment.GetEnvironmentVariable("PAGE_CONNECTIONS"));
+    private protected virtual PageConnections Connections => configuredConnections;
+    internal static HttpClient CreatePageClient()
     {
-        // gzip only: brotli costs 30-40ms extra ttfb (cloudflare recompresses on the fly)
-        AutomaticDecompression = System.Net.DecompressionMethods.GZip,
-        EnableMultipleHttp2Connections = true,
-        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
-        InitialHttp2StreamWindowSize = 4 * 1024 * 1024 // default 64KB throttles the MB-sized page bodies
-    })
+        var client = new HttpClient(new SocketsHttpHandler()
+        {
+            // gzip only: brotli costs 30-40ms extra ttfb (cloudflare recompresses on the fly)
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip,
+            EnableMultipleHttp2Connections = true,
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+            InitialHttp2StreamWindowSize = 4 * 1024 * 1024 // default 64KB throttles the MB-sized page bodies
+        })
+        {
+            DefaultRequestVersion = System.Net.HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
+        };
+        client.DefaultRequestHeaders.ConnectionClose = false;
+        return client;
+    }
+
+    /// <summary>
+    /// Whether the downloads of a round use a connection each or share one
+    /// </summary>
+    internal enum PageConnections { Separate, Shared, Alternate }
+
+    internal static PageConnections ParseConnections(string value)
     {
-        DefaultRequestVersion = System.Net.HttpVersion.Version20,
-        DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
-    };
+        return Enum.TryParse<PageConnections>(value, true, out var mode) && Enum.IsDefined(mode) ? mode : PageConnections.Alternate;
+    }
+
+    internal static bool UsesOwnConnections(PageConnections mode, DateTime utcNow)
+    {
+        return mode switch
+        {
+            PageConnections.Separate => true,
+            PageConnections.Shared => false,
+            _ => utcNow.Minute % 2 == 1
+        };
+    }
+
+    /// <summary>
+    /// Starts a round, the connection mode is chosen once for all its downloads
+    /// </summary>
+    protected PageRace NewRace() => new PageRace { OwnConnections = UsesOwnConnections(Connections, DateTime.UtcNow) };
+
     /// <summary>
     /// When the page with the snapshot we currently have finished downloading
     /// </summary>
@@ -54,7 +94,6 @@ public class NewUpdater
     {
         this.activitySource = activitySource;
         this.kafkaCreator = kafkaCreator;
-        httpClient.DefaultRequestHeaders.ConnectionClose = false;
     }
 
     public async Task DoUpdates(int index, CancellationToken token)
@@ -168,6 +207,31 @@ public class NewUpdater
     {
         private int firstHandOver;
         private int finishedBy;
+        private long bodyStart;
+        private long bodyEnd;
+        private TimeSpan cpuStart;
+        private TimeSpan cpuEnd;
+        private TimeSpan gcStart;
+        private TimeSpan gcEnd;
+        /// <summary>
+        /// Whether the downloads of this round use a connection each
+        /// </summary>
+        public bool OwnConnections { get; init; }
+
+        /// <summary>
+        /// Time from the first hand over to the finish of the round, zero when the round had no hand over or did not finish
+        /// </summary>
+        public TimeSpan BodyWall => Volatile.Read(ref bodyEnd) == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(bodyStart, bodyEnd);
+
+        /// <summary>
+        /// Garbage collection pause of the whole process during <see cref="BodyWall"/>
+        /// </summary>
+        public TimeSpan BodyGcPause => Volatile.Read(ref bodyEnd) == 0 ? TimeSpan.Zero : gcEnd - gcStart;
+
+        /// <summary>
+        /// Cpu time of the whole process during <see cref="BodyWall"/>
+        /// </summary>
+        public TimeSpan BodyCpu => Volatile.Read(ref bodyEnd) == 0 ? TimeSpan.Zero : cpuEnd - cpuStart;
         /// <summary>
         /// Cancelled when one download has read its new auctions to the end, stops the bodies of the others
         /// </summary>
@@ -176,12 +240,29 @@ public class NewUpdater
         /// <summary>
         /// True for the one download that hands over the first auction of the round
         /// </summary>
-        internal bool TryClaimFirstHandOver() => Interlocked.CompareExchange(ref firstHandOver, 1, 0) == 0;
+        internal bool TryClaimFirstHandOver()
+        {
+            if (Interlocked.CompareExchange(ref firstHandOver, 1, 0) != 0)
+                return false;
+            bodyStart = Stopwatch.GetTimestamp();
+            cpuStart = Environment.CpuUsage.TotalTime;
+            gcStart = GC.GetTotalPauseDuration();
+            return true;
+        }
 
         /// <summary>
         /// True for the one download that finishes the round
         /// </summary>
-        internal bool TryClaimFinish() => Interlocked.CompareExchange(ref finishedBy, 1, 0) == 0;
+        internal bool TryClaimFinish()
+        {
+            if (Interlocked.CompareExchange(ref finishedBy, 1, 0) != 0)
+                return false;
+            cpuEnd = Environment.CpuUsage.TotalTime;
+            gcEnd = GC.GetTotalPauseDuration();
+            // written last, readers treat a set end as the round being measured
+            Volatile.Write(ref bodyEnd, Stopwatch.GetTimestamp());
+            return true;
+        }
 
         /// <summary>
         /// True once one download has read its new auctions to the end
@@ -227,6 +308,8 @@ public class NewUpdater
         var dnsName = System.Net.Dns.GetHostName();
         var minModTime = GetMinModifiedTime(lastUpdate, lastReceived);
         var roundFinished = false;
+        // the connection is chosen per round, without a race there is only the shared one
+        var sendClient = race?.OwnConnections == true ? ownClients.GetOrAdd(iter, _ => CreatePageClient()) : httpClient;
         while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
         {
             var downloadStart = DateTime.Now;
@@ -256,7 +339,7 @@ public class NewUpdater
                 // create new token with timeout
                 tokenSource = new CancellationTokenSource();
                 overallUpdateCancle.Token.Register(tokenSource.Cancel);
-                s = await NewMethod(tokenSource, message).ConfigureAwait(false);
+                s = await NewMethod(tokenSource, message, sendClient).ConfigureAwait(false);
                 tokenSource.Cancel();
             }
             catch (TaskCanceledException)
@@ -265,7 +348,7 @@ public class NewUpdater
                 return (lastUpdate, 0); // was not fast enough
             }
             var intermediate = DateTime.Now;
-            if (s.StatusCode != System.Net.HttpStatusCode.OK || s.Headers.Date == httpClient.DefaultRequestHeaders.IfModifiedSince)
+            if (s.StatusCode != System.Net.HttpStatusCode.OK || s.Headers.Date == sendClient.DefaultRequestHeaders.IfModifiedSince)
             {
                 if (tryCount++ % 20 == 1)
                     Console.WriteLine($" - 20x not changed {pageId} {s.StatusCode}");
@@ -400,7 +483,7 @@ public class NewUpdater
 
             _ = int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
 
-            Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}{(race == null ? "" : " by" + iter)}");
+            Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}{(race == null ? "" : " by" + iter + $" read {index} head {(intermediate - page.LastUpdated).TotalSeconds:0.000} http{s.Version} {(race.OwnConnections ? "own" : "shared")}")}");
             if (roundFinished)
                 UpdateDone();
         }
@@ -458,9 +541,9 @@ public class NewUpdater
         Updater.ProduceIntoTopic(Updater.NewAuctionsTopic, p, a, prodSpan);
     }
 
-    protected virtual async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+    protected virtual async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message, HttpClient client)
     {
-        return await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
+        return await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, tokenSource.Token).ConfigureAwait(false);
     }
 
 
