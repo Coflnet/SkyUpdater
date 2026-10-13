@@ -32,8 +32,8 @@ public class NewUpdater
     /// One client (and with it one connection) per download id, kept so the connection stays pooled between rounds
     /// </summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, HttpClient> ownClients = new();
-    // Alternate is the measurement setting: rounds alternate so shared and separate connections can be compared
-    // on the same pods, to be fixed to one value once measured
+    // Shared is the default. Alternate is the measurement setting: rounds alternate so shared and separate
+    // connections can be compared on the same pods
     private static readonly PageConnections configuredConnections = ParseConnections(Environment.GetEnvironmentVariable("PAGE_CONNECTIONS"));
     private protected virtual PageConnections Connections => configuredConnections;
     internal static HttpClient CreatePageClient()
@@ -61,7 +61,7 @@ public class NewUpdater
 
     internal static PageConnections ParseConnections(string value)
     {
-        return Enum.TryParse<PageConnections>(value, true, out var mode) && Enum.IsDefined(mode) ? mode : PageConnections.Alternate;
+        return Enum.TryParse<PageConnections>(value, true, out var mode) && Enum.IsDefined(mode) ? mode : PageConnections.Shared;
     }
 
     internal static bool UsesOwnConnections(PageConnections mode, DateTime utcNow)

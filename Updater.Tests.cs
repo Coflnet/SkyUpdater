@@ -886,10 +886,10 @@ namespace Coflnet.Sky.Updater.Tests
         [TestCase("separate", "Separate")]
         [TestCase("SHARED", "Shared")]
         [TestCase("alternate", "Alternate")]
-        [TestCase("", "Alternate")]
-        [TestCase(null, "Alternate")]
-        [TestCase("nonsense", "Alternate")]
-        [TestCase("7", "Alternate")]
+        [TestCase("", "Shared")]
+        [TestCase(null, "Shared")]
+        [TestCase("nonsense", "Shared")]
+        [TestCase("7", "Shared")]
         public void ConnectionModeIsParsedFromTheEnvironmentValue(string value, string expected)
         {
             Assert.That(NewUpdater.ParseConnections(value), Is.EqualTo(Enum.Parse<NewUpdater.PageConnections>(expected)));
