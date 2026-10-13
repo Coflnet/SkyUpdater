@@ -9,12 +9,12 @@ namespace Coflnet.Sky.Updater;
 /// </summary>
 internal class SeenAuctions
 {
-    private readonly ConcurrentDictionary<string, DateTime> seen = new();
+    private readonly ConcurrentDictionary<Guid, DateTime> seen = new();
 
     /// <summary>
     /// True the first time an uuid is seen, false afterwards
     /// </summary>
-    public bool FirstSighting(string uuid, DateTime stamp) => seen.TryAdd(uuid, stamp);
+    public bool FirstSighting(Guid uuid, DateTime stamp) => seen.TryAdd(uuid, stamp);
 
     /// <summary>
     /// Drops everything recorded with a snapshot stamp before <paramref name="olderThan"/>

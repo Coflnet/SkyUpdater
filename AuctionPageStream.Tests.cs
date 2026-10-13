@@ -103,5 +103,144 @@ namespace Coflnet.Sky.Updater.Tests
                 count++;
             Assert.That(count, Is.EqualTo(4));
         }
+
+        private static string Page(params string[] auctions)
+            => "{\"success\":true,\"lastUpdated\":1791849246275,\"auctions\":[" + string.Join(",", auctions) + "]}";
+
+        private static async Task<List<(AuctionHead head, Auction auction)>> ReadHeads(byte[] body, int chunk, Func<int, bool> materialize = null)
+        {
+            var parser = new AuctionPageStream(new ChunkedStream(body, chunk));
+            await parser.ReadLastUpdated();
+            var result = new List<(AuctionHead, Auction)>();
+            var i = 0;
+            await foreach (var head in parser.ReadAuctionHeads())
+                result.Add((head, materialize == null || materialize(i++) ? parser.ReadCurrentAuction() : null));
+            return result;
+        }
+
+        private static List<Auction> ExpectedAuctions(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("auctions").EnumerateArray()
+                .Select(e => JsonSerializer.Deserialize<Auction>(e.GetRawText())).ToList();
+        }
+
+        [TestCase(1)]
+        [TestCase(7)]
+        [TestCase(64)]
+        [TestCase(1400)]
+        [TestCase(65536)]
+        public async Task HeadsWithCurrentAuctionEqualPlainDeserialize(int chunk)
+        {
+            var expected = ExpectedAuctions(Body);
+            var read = await ReadHeads(BodyBytes, chunk);
+            Assert.That(read.Select(r => JsonSerializer.Serialize(r.auction)), Is.EqualTo(expected.Select(e => JsonSerializer.Serialize(e))));
+            Assert.That(read.Select(r => r.head.StartMs), Is.EqualTo(expected.Select(e => e._start)));
+            Assert.That(read.Select(r => r.head.Uuid), Is.EqualTo(expected.Select(e => AuctionPageStream.ToId(e.Uuid))));
+        }
+
+        [Test]
+        public async Task OnlySomeAuctionsMaterialized()
+        {
+            var expected = ExpectedAuctions(Body);
+            var read = await ReadHeads(BodyBytes, 7, i => i % 3 == 0);
+            Assert.That(read.Count, Is.EqualTo(4));
+            Assert.That(read.Select(r => r.auction != null), Is.EqualTo(new[] { true, false, false, true }));
+            Assert.That(JsonSerializer.Serialize(read[3].auction), Is.EqualTo(JsonSerializer.Serialize(expected[3])));
+            Assert.That(read.Select(r => r.head.StartMs), Is.EqualTo(expected.Select(e => e._start)));
+            Assert.That(read.Select(r => r.head.Uuid), Is.EqualTo(expected.Select(e => AuctionPageStream.ToId(e.Uuid))));
+        }
+
+        [Test]
+        public async Task HeadFieldsAfterOtherPropertiesAndNestedValues()
+        {
+            var json = Page("{\"coop\":[\"x\"],\"other\":{\"start\":5,\"uuid\":[1],\"deep\":{\"uuid\":\"nested\"}},\"item_name\":\"n\",\"start\":1791849232660,\"uuid\":\"aaaaaaaa11111111aaaaaaaa11111111\",\"end\":3}");
+            foreach (var chunk in new[] { 1, 5, 4096 })
+            {
+                var read = await ReadHeads(Encoding.UTF8.GetBytes(json), chunk);
+                Assert.That(read.Count, Is.EqualTo(1));
+                Assert.That(read[0].head.StartMs, Is.EqualTo(1791849232660));
+                Assert.That(read[0].head.Uuid, Is.EqualTo(Guid.Parse("aaaaaaaa11111111aaaaaaaa11111111")));
+                Assert.That(read[0].auction.ItemName, Is.EqualTo("n"));
+            }
+        }
+
+        [Test]
+        public async Task MissingOrMalformedHeadFieldsFallBackToDeserialize()
+        {
+            var json = Page(
+                "{\"uuid\":\"aaaaaaaa11111111aaaaaaaa11111111\",\"item_name\":\"no start\"}",
+                "{\"start\":42,\"item_name\":\"no uuid\"}",
+                "{\"uuid\":\"aaaaaaaa-1111-1111-aaaa-aaaa11111111\",\"start\":43,\"item_name\":\"dashed\"}");
+            var read = await ReadHeads(Encoding.UTF8.GetBytes(json), 3);
+            Assert.That(read.Select(r => r.auction.ItemName), Is.EqualTo(new[] { "no start", "no uuid", "dashed" }));
+            Assert.That(read[0].head.StartMs, Is.EqualTo(0));
+            Assert.That(read[1].head.Uuid, Is.EqualTo(Guid.Empty));
+            Assert.That(read[1].head.StartMs, Is.EqualTo(42));
+            Assert.That(read[2].head.Uuid, Is.EqualTo(Guid.Parse("aaaaaaaa11111111aaaaaaaa11111111")));
+        }
+
+        [Test]
+        public void NonStringUuidIsLeftToTheDeserializer()
+        {
+            var json = Encoding.UTF8.GetBytes(Page("{\"uuid\":{\"a\":1},\"start\":44}"));
+            Assert.CatchAsync<JsonException>(async () => await ReadHeads(json, 3));
+        }
+
+        [Test]
+        public void ToIdIsStable()
+        {
+            Assert.That(AuctionPageStream.ToId("not-a-guid"), Is.EqualTo(AuctionPageStream.ToId("not-a-guid")));
+            Assert.That(AuctionPageStream.ToId("not-a-guid"), Is.Not.EqualTo(AuctionPageStream.ToId("not-a-guid2")));
+            Assert.That(AuctionPageStream.ToId("aaaaaaaa11111111aaaaaaaa11111111"), Is.EqualTo(AuctionPageStream.ToId("aaaaaaaa-1111-1111-aaaa-aaaa11111111")));
+        }
+
+        [Test]
+        public async Task NonHexIdGivesStableHead()
+        {
+            var json = Page("{\"uuid\":\"zzzz\",\"start\":1}", "{\"uuid\":\"zzzz\",\"start\":2}");
+            var read = await ReadHeads(Encoding.UTF8.GetBytes(json), 4);
+            Assert.That(read[0].head.Uuid, Is.EqualTo(read[1].head.Uuid));
+            Assert.That(read[0].head.Uuid, Is.EqualTo(AuctionPageStream.ToId("zzzz")));
+        }
+
+        [Test]
+        public async Task EscapedStringValuesSurvive()
+        {
+            var name = "\u00a7aName \\\"q\\\" back\\\\slash";
+            var json = Page("{\"item_name\":\"" + name + "\",\"item_lore\":\"\u00a77l1\\n\\\"x\\\" \\\\ \u00a7c\",\"start\":1,\"uuid\":\"aaaaaaaa11111111aaaaaaaa11111111\"}");
+            var expected = ExpectedAuctions(json);
+            var read = await ReadHeads(Encoding.UTF8.GetBytes(json), 5);
+            Assert.That(read[0].auction.ItemName, Is.EqualTo(expected[0].ItemName));
+            Assert.That(read[0].auction.ItemLore, Is.EqualTo(expected[0].ItemLore));
+            Assert.That(read[0].auction.ItemName, Does.Contain("\u00a7a").And.Contain("\"q\"").And.Contain("back\\slash"));
+        }
+
+        [Test]
+        public async Task EscapedUuidStillParses()
+        {
+            var json = Page("{\"uuid\":\"\\u0061aaaaaaa11111111aaaaaaaa11111111\",\"start\":1}");
+            var read = await ReadHeads(Encoding.UTF8.GetBytes(json), 6);
+            Assert.That(read[0].head.Uuid, Is.EqualTo(Guid.Parse("aaaaaaaa11111111aaaaaaaa11111111")));
+        }
+
+        [Test]
+        public async Task ReadCurrentAuctionOnlyValidForCurrentHead()
+        {
+            var parser = new AuctionPageStream(new ChunkedStream(BodyBytes, 50));
+            await parser.ReadLastUpdated();
+            Assert.Throws<InvalidOperationException>(() => parser.ReadCurrentAuction());
+            await using var e = parser.ReadAuctionHeads().GetAsyncEnumerator();
+            Assert.That(await e.MoveNextAsync(), Is.True);
+            var first = parser.ReadCurrentAuction();
+            Assert.That(parser.ReadCurrentAuction(), Is.SameAs(first));
+            Assert.That(await e.MoveNextAsync(), Is.True);
+            Assert.That(parser.ReadCurrentAuction(), Is.Not.SameAs(first));
+            Assert.That(parser.ReadCurrentAuction().ItemName, Is.EqualTo("Bids"));
+            Assert.That(await e.MoveNextAsync(), Is.True);
+            Assert.That(await e.MoveNextAsync(), Is.True);
+            Assert.That(await e.MoveNextAsync(), Is.False);
+            Assert.Throws<InvalidOperationException>(() => parser.ReadCurrentAuction());
+        }
     }
 }

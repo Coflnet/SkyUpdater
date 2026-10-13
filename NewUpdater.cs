@@ -453,19 +453,29 @@ public class NewUpdater
                 var pagUpdatedAt = page.LastUpdated;
                 try
                 {
-                    await foreach (var auction in parser.ReadAuctions(raceToken).ConfigureAwait(false))
+                    await foreach (var head in parser.ReadAuctionHeads(raceToken).ConfigureAwait(false))
                     {
                         raceToken.ThrowIfCancellationRequested();
                         index++;
-                        if (auction.Start < lastUpdate - PublishDelay || !seenAuctions.FirstSighting(auction.Uuid, pagUpdatedAt))
+                        if (head.Start < lastUpdate - PublishDelay || !seenAuctions.FirstSighting(head.Uuid, pagUpdatedAt))
                         {
                             if (index % 250 == 0)
                             {
-                                Console.WriteLine($"skipping {auction.Uuid} {auction.Start} {pageId} {index} {count}");
+                                Console.WriteLine($"skipping {head.Uuid.ToString("N")} {head.Start} {pageId} {index} {count}");
                                 // another download handing over an auction first also counts as skipped, only an old one ends a race
-                                if (race == null ? index - count > 10 : auction.Start < lastUpdate - PublishDelay)
+                                if (race == null ? index - count > 10 : head.Start < lastUpdate - PublishDelay)
                                     break;
                             }
+                            continue;
+                        }
+                        Auction auction;
+                        try
+                        {
+                            auction = parser.ReadCurrentAuction();
+                        }
+                        catch (System.Text.Json.JsonException e)
+                        {
+                            Logger.Instance.Error(e, "Reading new auction");
                             continue;
                         }
                         using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();

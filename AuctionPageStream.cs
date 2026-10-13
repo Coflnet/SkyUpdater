@@ -1,13 +1,32 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Coflnet.Sky.Updater.Models;
 
 namespace Coflnet.Sky.Updater;
+
+/// <summary>
+/// The identifying fields of an auction, read without deserializing the whole object
+/// </summary>
+public readonly struct AuctionHead
+{
+    public AuctionHead(Guid uuid, long startMs)
+    {
+        Uuid = uuid;
+        StartMs = startMs;
+    }
+
+    public Guid Uuid { get; }
+    public long StartMs { get; }
+    public DateTime Start => new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(StartMs).ToLocalTime();
+}
 
 /// <summary>
 /// Incrementally parses the /v2/skyblock/auctions payload with Utf8JsonReader.
@@ -24,6 +43,11 @@ public class AuctionPageStream
     private bool inArray;
     private bool lastUpdatedPropSeen;
     private JsonReaderState state = new();
+    // the auction of the most recent head, valid until the enumeration advances or the buffer is refilled
+    private bool currentValid;
+    private int currentOffset;
+    private int currentLength;
+    private Auction currentAuction;
 
     public AuctionPageStream(Stream stream, int initialBufferSize = 64 * 1024)
     {
@@ -45,11 +69,22 @@ public class AuctionPageStream
 
     public async IAsyncEnumerable<Auction> ReadAuctions([EnumeratorCancellation] CancellationToken token = default)
     {
+        await foreach (var _ in ReadAuctionHeads(token).ConfigureAwait(false))
+            yield return ReadCurrentAuction();
+    }
+
+    /// <summary>
+    /// Yields uuid and start of every auction without deserializing it,
+    /// <see cref="ReadCurrentAuction"/> deserializes the auction of the latest head.
+    /// </summary>
+    public async IAsyncEnumerable<AuctionHead> ReadAuctionHeads([EnumeratorCancellation] CancellationToken token = default)
+    {
         while (true)
         {
-            Auction auction;
+            currentValid = false;
+            AuctionHead head;
             bool endOfArray;
-            while (!TryReadNextAuction(out auction, out endOfArray))
+            while (!TryReadNextAuction(out head, out endOfArray))
             {
                 if (finalBlock)
                     throw new InvalidDataException("response ended inside auctions array");
@@ -57,8 +92,25 @@ public class AuctionPageStream
             }
             if (endOfArray)
                 yield break;
-            yield return auction;
+            yield return head;
         }
+    }
+
+    /// <summary>
+    /// Deserializes the auction the latest head belongs to. Valid until the enumeration advances.
+    /// </summary>
+    public Auction ReadCurrentAuction()
+    {
+        if (!currentValid)
+            throw new InvalidOperationException("no current auction, read a head first and call this before advancing");
+        return currentAuction ??= JsonSerializer.Deserialize<Auction>(buffer.AsSpan(currentOffset, currentLength));
+    }
+
+    internal static Guid ToId(string uuid)
+    {
+        if (Guid.TryParse(uuid, out var guid))
+            return guid;
+        return new Guid(MD5.HashData(Encoding.UTF8.GetBytes(uuid)));
     }
 
     private bool TryReadLastUpdated(out long lastUpdated)
@@ -83,9 +135,9 @@ public class AuctionPageStream
     /// Attempts to read the next auction from buffered data.
     /// Returns false if more data is needed, sets endOfArray when the array closed.
     /// </summary>
-    private bool TryReadNextAuction(out Auction auction, out bool endOfArray)
+    private bool TryReadNextAuction(out AuctionHead head, out bool endOfArray)
     {
-        auction = null;
+        head = default;
         endOfArray = false;
         var reader = new Utf8JsonReader(buffer.AsSpan(consumed, filled - consumed), finalBlock, state);
         if (!inArray)
@@ -119,18 +171,46 @@ public class AuctionPageStream
         var probe = reader;
         if (!probe.TrySkip())
             return false; // element only partially buffered, nothing consumed
-        try
-        {
-            auction = JsonSerializer.Deserialize<Auction>(ref reader);
-        }
-        catch (JsonException)
-        {
-            if (finalBlock)
-                throw;
-            return false; // element only partially buffered, retry after fill
-        }
-        Commit(ref reader);
+        currentOffset = consumed + (int)reader.TokenStartIndex;
+        currentLength = (int)(probe.BytesConsumed - reader.TokenStartIndex);
+        currentAuction = null;
+        Commit(ref probe);
+        head = ReadHead(buffer.AsSpan(currentOffset, currentLength));
+        currentValid = true;
         return true;
+    }
+
+    private AuctionHead ReadHead(ReadOnlySpan<byte> json)
+    {
+        var reader = new Utf8JsonReader(json, isFinalBlock: true, state: default);
+        Guid uuid = default;
+        long startMs = 0;
+        bool hasUuid = false, hasStart = false;
+        reader.Read();
+        while (!(hasUuid && hasStart) && reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var isUuid = !hasUuid && reader.ValueTextEquals("uuid"u8);
+            var isStart = !hasStart && reader.ValueTextEquals("start"u8);
+            reader.Read();
+            if (isUuid && reader.TokenType == JsonTokenType.String)
+            {
+                if (!reader.ValueIsEscaped && !reader.HasValueSequence
+                    && Utf8Parser.TryParse(reader.ValueSpan, out Guid parsed, out int used, 'N') && used == reader.ValueSpan.Length)
+                    uuid = parsed;
+                else
+                    uuid = ToId(reader.GetString());
+                hasUuid = true;
+            }
+            else if (isStart && reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out startMs))
+                hasStart = true;
+            else
+                reader.Skip();
+        }
+        if (hasUuid && hasStart)
+            return new AuctionHead(uuid, startMs);
+        // unusual object, the deserializer decides what it makes of it
+        currentAuction = JsonSerializer.Deserialize<Auction>(json);
+        return new AuctionHead(currentAuction.Uuid == null ? Guid.Empty : ToId(currentAuction.Uuid), currentAuction._start);
     }
 
     private void Commit(ref Utf8JsonReader reader)
@@ -141,6 +221,7 @@ public class AuctionPageStream
 
     private async Task FillAsync(CancellationToken token)
     {
+        currentValid = false;
         if (consumed > 0)
         {
             Buffer.BlockCopy(buffer, consumed, buffer, 0, filled - consumed);

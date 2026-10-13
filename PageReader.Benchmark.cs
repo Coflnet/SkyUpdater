@@ -191,6 +191,14 @@ namespace Coflnet.Sky.Updater.Tests
             return list[list.Count / 2];
         }
 
+        private static void ReadHeadsOnly(byte[] page)
+        {
+            var parser = new AuctionPageStream(new MemoryStream(page));
+            parser.ReadLastUpdated().GetAwaiter().GetResult();
+            var e = parser.ReadAuctionHeads().GetAsyncEnumerator();
+            while (e.MoveNextAsync().AsTask().GetAwaiter().GetResult()) { }
+        }
+
         private void PartB(byte[] body)
         {
             var raw = SplitAuctions(body);
@@ -200,6 +208,21 @@ namespace Coflnet.Sky.Updater.Tests
 
             var full = Measure(raw.Count, 20, runs, i => JsonSerializer.Deserialize<Auction>(raw[i]));
             Out("(i)   reflection Deserialize<Auction>: " + full.Summary());
+
+            var page = Encoding.UTF8.GetBytes("{\"lastUpdated\":1,\"auctions\":[")
+                .Concat(raw.Select((r, i) => i == 0 ? r : new byte[] { (byte)',' }.Concat(r).ToArray()).SelectMany(r => r))
+                .Concat(Encoding.UTF8.GetBytes("]}")).ToArray();
+            var heads = new Stat();
+            for (int pass = 0; pass < 20 + runs; pass++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                var t = Stopwatch.GetTimestamp();
+                ReadHeadsOnly(page);
+                var el = Stopwatch.GetTimestamp() - t;
+                if (pass >= 20)
+                    heads.Add(el / raw.Count, (GC.GetAllocatedBytesForCurrentThread() - before) / raw.Count);
+            }
+            Out("(i-c) heads only, per auction over a whole page pass (includes read buffer): " + heads.Summary());
 
             var gen = Measure(raw.Count, 20, runs, i => JsonSerializer.Deserialize(raw[i], BenchAuctionContext.Default.Auction));
             Out("(i-b) source-generated Deserialize    : " + gen.Summary());
