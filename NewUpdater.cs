@@ -207,6 +207,8 @@ public class NewUpdater
     {
         private int firstHandOver;
         private int finishedBy;
+        private int requests;
+        private int otherAnswers;
         private long bodyStart;
         private long bodyEnd;
         private TimeSpan cpuStart;
@@ -236,6 +238,23 @@ public class NewUpdater
         /// Cancelled when one download has read its new auctions to the end, stops the bodies of the others
         /// </summary>
         public CancellationTokenSource Finished { get; } = new();
+
+        /// <summary>
+        /// Responses received by all downloads of this round
+        /// </summary>
+        public int Requests => Volatile.Read(ref requests);
+
+        /// <summary>
+        /// Responses of this round whose status is neither 200 nor 304
+        /// </summary>
+        public int OtherAnswers => Volatile.Read(ref otherAnswers);
+
+        internal void CountResponse(System.Net.HttpStatusCode status)
+        {
+            Interlocked.Increment(ref requests);
+            if (status != System.Net.HttpStatusCode.OK && status != System.Net.HttpStatusCode.NotModified)
+                Interlocked.Increment(ref otherAnswers);
+        }
 
         /// <summary>
         /// True for the one download that hands over the first auction of the round
@@ -287,9 +306,35 @@ public class NewUpdater
         }
     }
 
+    /// <summary>
+    /// Url of one download of a page
+    /// </summary>
+    protected virtual string PageUrl(int pageId, int iter, int tryCount)
+    {
+        var url = ApiBaseUrl + "/v2/skyblock/auctions";
+        if (iter >= 1 || pageId != 0)
+            url += "?page=" + pageId;
+        if (iter == 4)
+            url += "&t=" + tryCount + System.Net.Dns.GetHostName();
+        return url;
+    }
+
+    /// <summary>
+    /// Time a download waits before its first request
+    /// </summary>
+    protected virtual TimeSpan StartDelay(int iter) => TimeSpan.FromMilliseconds(iter * 200);
+
+    private static string CfRaySuffix(HttpResponseMessage response)
+    {
+        if (!response.Headers.TryGetValues("cf-ray", out var values))
+            return "-";
+        var ray = values.FirstOrDefault();
+        return string.IsNullOrEmpty(ray) ? "-" : ray.Substring(ray.LastIndexOf('-') + 1);
+    }
+
     protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, Activity siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0, PageRace race = null)
     {
-        await Task.Delay(iter * 200);
+        await Task.Delay(StartDelay(iter));
         if (pageUpdate.Token.IsCancellationRequested)
             return (lastUpdate, -1);
         var time = lastUpdate.ToUnix() * 1000;
@@ -305,7 +350,6 @@ public class NewUpdater
         if (pageUpdate != null)
             overallUpdateCancle = pageUpdate;
         var start = DateTime.Now;
-        var dnsName = System.Net.Dns.GetHostName();
         var minModTime = GetMinModifiedTime(lastUpdate, lastReceived);
         var roundFinished = false;
         // the connection is chosen per round, without a race there is only the shared one
@@ -314,11 +358,7 @@ public class NewUpdater
         {
             var downloadStart = DateTime.Now;
             //DateTimeOffset.Parse("Tue, 11 Jan 2022 09:37:58 GMT") + TimeSpan.FromSeconds(5);
-            var url = ApiBaseUrl + "/v2/skyblock/auctions";
-            if (iter >= 1 || pageId != 0)
-                url += "?page=" + pageId;
-            if (iter == 4)
-                url += "&t=" + tryCount + dnsName;
+            var url = PageUrl(pageId, iter, tryCount);
             var message = new HttpRequestMessage(HttpMethod.Get, url);
             // DefaultRequestVersion only applies to convenience methods, has to be set per message
             message.Version = System.Net.HttpVersion.Version20;
@@ -348,6 +388,8 @@ public class NewUpdater
                 return (lastUpdate, 0); // was not fast enough
             }
             var intermediate = DateTime.Now;
+            if (race != null)
+                race.CountResponse(s.StatusCode);
             if (s.StatusCode != System.Net.HttpStatusCode.OK || s.Headers.Date == sendClient.DefaultRequestHeaders.IfModifiedSince)
             {
                 if (tryCount++ % 20 == 1)
@@ -483,7 +525,7 @@ public class NewUpdater
 
             _ = int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
 
-            Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}{(race == null ? "" : " by" + iter + $" read {index} head {(intermediate - page.LastUpdated).TotalSeconds:0.000} http{s.Version} {(race.OwnConnections ? "own" : "shared")}")}");
+            Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}{(race == null ? "" : " by" + iter + $" read {index} head {(intermediate - page.LastUpdated).TotalSeconds:0.000} http{s.Version} {(race.OwnConnections ? "own" : "shared")} cf {CfRaySuffix(s)}")}");
             if (roundFinished)
                 UpdateDone();
         }

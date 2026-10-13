@@ -513,6 +513,13 @@ namespace Coflnet.Sky.Updater.Tests
             public readonly System.Collections.Concurrent.ConcurrentQueue<(string uuid, TimeSpan at)> Found = new();
             public int Requests;
             public PageConnections Mode = PageConnections.Shared;
+            public Func<int, int, int, string> UrlOverride;
+            public Func<int, TimeSpan?> DelayOverride;
+            public readonly Queue<HttpStatusCode> Statuses = new();
+            public string UrlOf(int pageId, int iter, int tryCount) => PageUrl(pageId, iter, tryCount);
+            public TimeSpan DelayOf(int iter) => StartDelay(iter);
+            protected override string PageUrl(int pageId, int iter, int tryCount) => UrlOverride?.Invoke(pageId, iter, tryCount) ?? base.PageUrl(pageId, iter, tryCount);
+            protected override TimeSpan StartDelay(int iter) => DelayOverride?.Invoke(iter) ?? base.StartDelay(iter);
             /// <summary>
             /// The client each request was sent with, by download id (the id is in the url: none, page only or page with t)
             /// </summary>
@@ -576,6 +583,12 @@ namespace Coflnet.Sky.Updater.Tests
                 {
                     Requests++;
                     Clients.Enqueue((message.RequestUri.ToString(), client));
+                    if (Statuses.TryDequeue(out var status))
+                    {
+                        var plain = new HttpResponseMessage(status);
+                        plain.Headers.Date = DateTimeOffset.UtcNow;
+                        return plain;
+                    }
                     if (!bodies.TryDequeue(out body))
                         throw new InvalidOperationException("more requests than scripted bodies");
                 }
@@ -753,6 +766,66 @@ namespace Coflnet.Sky.Updater.Tests
                 updater.Download(lastUpdate.LocalDateTime, round, 1, race),
                 updater.Download(lastUpdate.LocalDateTime, round, 2, race));
             return race;
+        }
+
+        [Test]
+        public void DefaultPageUrlsAreUnchanged()
+        {
+            var updater = new RacingPageUpdater();
+
+            Assert.That(updater.UrlOf(0, 0, 0), Is.EqualTo("https://api.hypixel.net/v2/skyblock/auctions"));
+            Assert.That(updater.UrlOf(0, 2, 7), Is.EqualTo("https://api.hypixel.net/v2/skyblock/auctions?page=0"));
+            Assert.That(updater.UrlOf(3, 0, 0), Is.EqualTo("https://api.hypixel.net/v2/skyblock/auctions?page=3"));
+            var fourth = updater.UrlOf(0, 4, 7);
+            Assert.That(fourth, Does.StartWith("https://api.hypixel.net/v2/skyblock/auctions?page=0&t="));
+            Assert.That(fourth, Does.Contain("&t=7"));
+        }
+
+        [Test]
+        public void DefaultStartDelayIs200MsPerId()
+        {
+            var updater = new RacingPageUpdater();
+
+            Assert.That(updater.DelayOf(0), Is.EqualTo(TimeSpan.Zero));
+            Assert.That(updater.DelayOf(2), Is.EqualTo(TimeSpan.FromMilliseconds(400)));
+            Assert.That(updater.DelayOf(4), Is.EqualTo(TimeSpan.FromMilliseconds(800)));
+        }
+
+        [Test]
+        public async Task OverriddenUrlIsRequestedAndOverriddenDelayHonoured()
+        {
+            var updater = new RacingPageUpdater
+            {
+                UrlOverride = (page, iter, tries) => "https://example.invalid/custom/" + iter,
+                DelayOverride = iter => TimeSpan.FromMilliseconds(300)
+            };
+            var lastUpdate = RecentStamp();
+            updater.AddBody(TimeSpan.Zero, lastUpdate.AddSeconds(60), new[] { CreateAuction(lastUpdate) }, TimeSpan.Zero, null);
+            var round = new CancellationTokenSource(20000);
+            var race = updater.StartRace();
+            var started = updater.Now;
+
+            await updater.Download(lastUpdate.LocalDateTime, round, 3, race);
+
+            Assert.That(updater.Clients.Select(c => c.url), Is.EqualTo(new[] { "https://example.invalid/custom/3" }));
+            Assert.That(updater.Now - started, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(290)));
+        }
+
+        [Test]
+        public async Task RaceCountsResponsesAndUnexpectedStatuses()
+        {
+            var updater = new RacingPageUpdater();
+            var lastUpdate = RecentStamp();
+            updater.Statuses.Enqueue(HttpStatusCode.NotModified);
+            updater.Statuses.Enqueue(HttpStatusCode.TooManyRequests);
+            updater.AddBody(TimeSpan.Zero, lastUpdate.AddSeconds(60), new[] { CreateAuction(lastUpdate) }, TimeSpan.Zero, null);
+            var round = new CancellationTokenSource(20000);
+            var race = updater.StartRace();
+
+            await updater.Download(lastUpdate.LocalDateTime, round, 0, race);
+
+            Assert.That(race.Requests, Is.EqualTo(3));
+            Assert.That(race.OtherAnswers, Is.EqualTo(1));
         }
 
         private static DateTimeOffset RecentStamp() => DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
