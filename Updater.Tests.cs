@@ -502,6 +502,231 @@ namespace Coflnet.Sky.Updater.Tests
             }
         }
 
+        /// <summary>
+        /// Serves one scripted body per request, in the order the requests arrive, and notes when each auction was handed over.
+        /// A body is a list of chunks, each handed out after its own delay (infinite stalls the body).
+        /// </summary>
+        private class RacingPageUpdater : NewUpdater
+        {
+            private readonly Queue<(TimeSpan headerDelay, (byte[] data, TimeSpan delay)[] chunks)> bodies = new();
+            private readonly Stopwatch clock = Stopwatch.StartNew();
+            public readonly System.Collections.Concurrent.ConcurrentQueue<(string uuid, TimeSpan at)> Found = new();
+            public int Requests;
+
+            public RacingPageUpdater() : base(new ActivitySource("UpdaterTests"), null) { }
+
+            protected override IProducer<string, SaveAuction> GetProducer() => new FakeProducer();
+
+            protected override void FoundNew(int pageId, IProducer<string, SaveAuction> p, AuctionPage page, int tryCount, Auction auction, Activity prodSpan, int count)
+            {
+                Found.Enqueue((auction.Uuid, clock.Elapsed));
+            }
+
+            public TimeSpan Now => clock.Elapsed;
+
+            private static byte[] Bytes(string text) => System.Text.Encoding.UTF8.GetBytes(text);
+            private static string Json(Auction a) => System.Text.Json.JsonSerializer.Serialize(a);
+
+            /// <summary>
+            /// Queues a body: the start of the page with the first auctions, then the rest after the pause
+            /// </summary>
+            public void AddBody(TimeSpan headerDelay, DateTimeOffset stamp, Auction[] first, TimeSpan pause, Auction[] rest)
+            {
+                var head = $"{{\"success\":true,\"page\":0,\"totalPages\":1,\"totalAuctions\":0,\"lastUpdated\":{stamp.ToUnixTimeMilliseconds()},\"auctions\":[{string.Join(",", first.Select(Json))}";
+                var chunks = new List<(byte[], TimeSpan)> { (Bytes(head), TimeSpan.Zero) };
+                if (rest != null)
+                    chunks.Add((Bytes((first.Length > 0 ? "," : "") + string.Join(",", rest.Select(Json)) + "]}"), pause));
+                else
+                    chunks.Add((Bytes("]}"), pause));
+                bodies.Enqueue((headerDelay, chunks.ToArray()));
+            }
+
+            /// <summary>
+            /// Queues a body that sends the start of the page and nothing after it
+            /// </summary>
+            public void AddStalledBody(TimeSpan headerDelay, DateTimeOffset stamp)
+            {
+                var head = $"{{\"success\":true,\"page\":0,\"totalPages\":1,\"totalAuctions\":0,\"lastUpdated\":{stamp.ToUnixTimeMilliseconds()},\"auctions\":[";
+                bodies.Enqueue((headerDelay, new[] { (Bytes(head), TimeSpan.Zero), (Bytes("]}"), Timeout.InfiniteTimeSpan) }));
+            }
+
+            /// <summary>
+            /// Queues a body that sends the start of the page with the given auctions and then fails the next read like a reset connection
+            /// </summary>
+            public void AddBreakingBody(TimeSpan headerDelay, DateTimeOffset stamp, params Auction[] first)
+            {
+                var head = $"{{\"success\":true,\"page\":0,\"totalPages\":1,\"totalAuctions\":0,\"lastUpdated\":{stamp.ToUnixTimeMilliseconds()},\"auctions\":[{string.Join(",", first.Select(Json))}";
+                bodies.Enqueue((headerDelay, new[] { (Bytes(head), TimeSpan.Zero), (Array.Empty<byte>(), TimeSpan.MinValue) }));
+            }
+
+            public Task<(DateTime, int)[]> Await(NewUpdater.PageRace race, params Task<(DateTime, int)>[] downloads) => AwaitRace(race, downloads);
+
+            protected override async Task<HttpResponseMessage> NewMethod(CancellationTokenSource tokenSource, HttpRequestMessage message)
+            {
+                (TimeSpan headerDelay, (byte[] data, TimeSpan delay)[] chunks) body;
+                lock (bodies)
+                {
+                    Requests++;
+                    if (!bodies.TryDequeue(out body))
+                        throw new InvalidOperationException("more requests than scripted bodies");
+                }
+                await Task.Delay(body.headerDelay, tokenSource.Token);
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new ChunkStream(body.chunks)) };
+                response.Headers.Date = DateTimeOffset.UtcNow;
+                return response;
+            }
+
+            public Task<(DateTime, int)> Download(DateTime lastUpdate, CancellationTokenSource round, int iter, PageRace race)
+            {
+                return GetAndSavePage(0, new FakeProducer(), lastUpdate, new Activity("test"), round, iter, race);
+            }
+
+            private class ChunkStream : Stream
+            {
+                private readonly (byte[] data, TimeSpan delay)[] chunks;
+                private int step;
+
+                public ChunkStream((byte[] data, TimeSpan delay)[] chunks) => this.chunks = chunks;
+
+                public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+                {
+                    if (step >= chunks.Length)
+                        return 0;
+                    var (data, delay) = chunks[step++];
+                    if (delay == TimeSpan.MinValue)
+                        throw new IOException("connection reset");
+                    if (delay != TimeSpan.Zero)
+                        await Task.Delay(delay, cancellationToken);
+                    data.CopyTo(buffer);
+                    return data.Length;
+                }
+
+                public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().Result;
+                public override bool CanRead => true;
+                public override bool CanSeek => false;
+                public override bool CanWrite => false;
+                public override long Length => throw new NotSupportedException();
+                public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+                public override void Flush() { }
+                public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+                public override void SetLength(long value) => throw new NotSupportedException();
+                public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            }
+        }
+
+        /// <summary>
+        /// The first download that read a new snapshot used to cancel the other ones, so a body that delivers faster than the one
+        /// whose headers arrived first was never read. With a race both bodies are read and each auction comes from whichever has it first.
+        /// </summary>
+        [Test]
+        public async Task RacingBodiesHandOverEachAuctionOnceFromTheFasterBody()
+        {
+            var updater = new RacingPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var stamp = lastUpdate.AddSeconds(60);
+            var x = CreateAuction(lastUpdate);
+            var y = CreateAuction(lastUpdate);
+            // A has its headers first but pauses before the second auction, B is a little later and has both at once
+            updater.AddBody(TimeSpan.Zero, stamp, new[] { x }, TimeSpan.FromSeconds(2), new[] { y });
+            updater.AddBody(TimeSpan.Zero, stamp, new[] { x, y }, TimeSpan.Zero, null);
+            var round = new CancellationTokenSource(20000);
+            var race = new NewUpdater.PageRace();
+            var started = updater.Now;
+
+            var results = await Task.WhenAll(
+                updater.Download(lastUpdate.LocalDateTime, round, 0, race),
+                updater.Download(lastUpdate.LocalDateTime, round, 1, race));
+
+            var found = updater.Found.ToList();
+            Assert.That(found.Select(f => f.uuid), Is.EquivalentTo(new[] { x.Uuid, y.Uuid }));
+            Assert.That(found.Single(f => f.uuid == y.Uuid).at - started, Is.LessThan(TimeSpan.FromSeconds(1)));
+            Assert.That(updater.Now - started, Is.LessThan(TimeSpan.FromSeconds(1.5)), "the paused body was waited for");
+            Assert.That(results.Select(r => r.Item1), Is.All.EqualTo(stamp.LocalDateTime));
+        }
+
+        [Test]
+        public async Task RacingBodyThatStallsIsCutWhenAnotherOneIsDone()
+        {
+            var updater = new RacingPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var stamp = lastUpdate.AddSeconds(60);
+            var x = CreateAuction(lastUpdate);
+            // A is slow enough for B to get its start, B never delivers anything after it
+            updater.AddBody(TimeSpan.Zero, stamp, new[] { x }, TimeSpan.FromMilliseconds(500), null);
+            updater.AddStalledBody(TimeSpan.Zero, stamp);
+            var round = new CancellationTokenSource(20000);
+            var race = new NewUpdater.PageRace();
+            var started = updater.Now;
+
+            var results = await Task.WhenAll(
+                updater.Download(lastUpdate.LocalDateTime, round, 0, race),
+                updater.Download(lastUpdate.LocalDateTime, round, 1, race)).WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(updater.Now - started, Is.LessThan(TimeSpan.FromSeconds(1.5)));
+            Assert.That(results.Select(r => r.Item1), Is.All.EqualTo(stamp.LocalDateTime));
+            Assert.That(updater.Found.Select(f => f.uuid), Is.EqualTo(new[] { x.Uuid }));
+        }
+
+        [Test]
+        public async Task RacingBodyThatBreaksDoesNotFailARoundAnotherOneFinished()
+        {
+            var updater = new RacingPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var stamp = lastUpdate.AddSeconds(60);
+            var x = CreateAuction(lastUpdate);
+            var y = CreateAuction(lastUpdate);
+            // A hands over X and breaks, B is later and completes
+            updater.AddBreakingBody(TimeSpan.Zero, stamp, x);
+            updater.AddBody(TimeSpan.FromMilliseconds(300), stamp, new[] { x, y }, TimeSpan.Zero, null);
+            var round = new CancellationTokenSource(20000);
+            var race = new NewUpdater.PageRace();
+
+            var results = await updater.Await(race,
+                updater.Download(lastUpdate.LocalDateTime, round, 0, race),
+                updater.Download(lastUpdate.LocalDateTime, round, 1, race));
+
+            Assert.That(updater.Found.Select(f => f.uuid), Is.EquivalentTo(new[] { x.Uuid, y.Uuid }));
+            Assert.That(results.Max(r => r.Item1), Is.EqualTo(stamp.LocalDateTime));
+            Assert.That(race.IsFinished, Is.True);
+        }
+
+        [Test]
+        public async Task RacingBodyThatBreaksFailsTheRoundWhenNoOtherOneFinishes()
+        {
+            var updater = new RacingPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var stamp = lastUpdate.AddSeconds(60);
+            updater.AddBreakingBody(TimeSpan.Zero, stamp, CreateAuction(lastUpdate));
+            var round = new CancellationTokenSource(20000);
+            var race = new NewUpdater.PageRace();
+
+            Assert.ThrowsAsync<IOException>(async () => await updater.Await(race, updater.Download(lastUpdate.LocalDateTime, round, 0, race)));
+            Assert.That(race.IsFinished, Is.False);
+        }
+
+        [Test]
+        public async Task WithoutARaceTheSecondDownloadIsCancelledByTheFirst()
+        {
+            var updater = new RacingPageUpdater();
+            var lastUpdate = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 3000);
+            var stamp = lastUpdate.AddSeconds(60);
+            var x = CreateAuction(lastUpdate);
+            var y = CreateAuction(lastUpdate);
+            updater.AddBody(TimeSpan.Zero, stamp, new[] { x }, TimeSpan.FromMilliseconds(500), new[] { y });
+            updater.AddBody(TimeSpan.Zero, stamp, new[] { x, y }, TimeSpan.Zero, null);
+            var round = new CancellationTokenSource(20000);
+
+            var first = updater.Download(lastUpdate.LocalDateTime, round, 0, null);
+            var second = updater.Download(lastUpdate.LocalDateTime, round, 1, null);
+            var results = await Task.WhenAll(first, second);
+
+            Assert.That(results[0].Item1, Is.EqualTo(stamp.LocalDateTime));
+            Assert.That(results[1].Item1, Is.EqualTo(lastUpdate.LocalDateTime));
+            Assert.That(updater.Requests, Is.EqualTo(1));
+            // everything came from the first body, in its order
+            Assert.That(updater.Found.Select(f => f.uuid), Is.EqualTo(new[] { x.Uuid, y.Uuid }));
+        }
+
         [Test]
         public void TimedOutPollKeepsTheLastUpdate()
         {

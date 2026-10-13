@@ -159,7 +159,54 @@ public class NewUpdater
         return kafkaCreator.BuildProducer<string, SaveAuction>();
     }
 
-    protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, Activity siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0)
+    /// <summary>
+    /// Shared by the concurrent downloads of one update round. Without it the first download that reads a new snapshot
+    /// cancels the others, with it every download that gets the snapshot reads its body and each auction is handed over
+    /// by whichever body has it first.
+    /// </summary>
+    public class PageRace
+    {
+        private int firstHandOver;
+        private int finishedBy;
+        /// <summary>
+        /// Cancelled when one download has read its new auctions to the end, stops the bodies of the others
+        /// </summary>
+        public CancellationTokenSource Finished { get; } = new();
+
+        /// <summary>
+        /// True for the one download that hands over the first auction of the round
+        /// </summary>
+        internal bool TryClaimFirstHandOver() => Interlocked.CompareExchange(ref firstHandOver, 1, 0) == 0;
+
+        /// <summary>
+        /// True for the one download that finishes the round
+        /// </summary>
+        internal bool TryClaimFinish() => Interlocked.CompareExchange(ref finishedBy, 1, 0) == 0;
+
+        /// <summary>
+        /// True once one download has read its new auctions to the end
+        /// </summary>
+        public bool IsFinished => Volatile.Read(ref finishedBy) == 1;
+    }
+
+    /// <summary>
+    /// Waits for all downloads of a round. A download that failed only fails the round when no other one finished it.
+    /// </summary>
+    protected static async Task<(DateTime, int)[]> AwaitRace(PageRace race, IReadOnlyCollection<Task<(DateTime, int)>> downloads)
+    {
+        try
+        {
+            return await Task.WhenAll(downloads).ConfigureAwait(false);
+        }
+        catch when (race.IsFinished && downloads.Any(d => d.Status == TaskStatus.RanToCompletion))
+        {
+            foreach (var failed in downloads.Where(d => d.IsFaulted))
+                dev.Logger.Instance.Error(failed.Exception.GetBaseException(), "download failed in a round another one finished");
+            return downloads.Where(d => d.Status == TaskStatus.RanToCompletion).Select(d => d.Result).ToArray();
+        }
+    }
+
+    protected async Task<(DateTime, int)> GetAndSavePage(int pageId, IProducer<string, SaveAuction> p, DateTime lastUpdate, Activity siteSpan, CancellationTokenSource pageUpdate = null, int iter = 0, PageRace race = null)
     {
         await Task.Delay(iter * 200);
         if (pageUpdate.Token.IsCancellationRequested)
@@ -179,6 +226,7 @@ public class NewUpdater
         var start = DateTime.Now;
         var dnsName = System.Net.Dns.GetHostName();
         var minModTime = GetMinModifiedTime(lastUpdate, lastReceived);
+        var roundFinished = false;
         while (page.LastUpdated <= lastUpdate && !overallUpdateCancle.Token.IsCancellationRequested)
         {
             var downloadStart = DateTime.Now;
@@ -241,7 +289,15 @@ public class NewUpdater
             using (var bodyStream = await s.Content.ReadAsStreamAsync().ConfigureAwait(false))
             {
                 var parser = new AuctionPageStream(bodyStream);
-                page._lastUpdated = await parser.ReadLastUpdated().ConfigureAwait(false);
+                try
+                {
+                    page._lastUpdated = await parser.ReadLastUpdated(race?.Finished.Token ?? default).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (race != null && race.Finished.IsCancellationRequested)
+                {
+                    // another download is done before the start of this body arrived
+                    return (lastUpdate, 0);
+                }
                 if (page.LastUpdated <= lastUpdate)
                 {
                     // cloudflare stored the snapshot we already have again, only ask for copies newer than this one
@@ -264,52 +320,78 @@ public class NewUpdater
                     pageUpdate.Cancel();
                     return (lastUpdate, 0);
                 }
-                overallUpdateCancle.Cancel();
+                // with a race the other downloads keep running, the one that is done cancels them
+                if (race == null)
+                    overallUpdateCancle.Cancel();
+                var raceToken = race?.Finished.Token ?? default;
+                var endedByItself = true;
                 var pagUpdatedAt = page.LastUpdated;
-                await foreach (var auction in parser.ReadAuctions().ConfigureAwait(false))
+                try
                 {
-                    index++;
-                    if (auction.Start < lastUpdate - PublishDelay || !seenAuctions.FirstSighting(auction.Uuid, pagUpdatedAt))
+                    await foreach (var auction in parser.ReadAuctions(raceToken).ConfigureAwait(false))
                     {
-                        if (index % 250 == 0)
+                        raceToken.ThrowIfCancellationRequested();
+                        index++;
+                        if (auction.Start < lastUpdate - PublishDelay || !seenAuctions.FirstSighting(auction.Uuid, pagUpdatedAt))
                         {
-                            Console.WriteLine($"skipping {auction.Uuid} {auction.Start} {pageId} {index} {count}");
-                            if (index - count > 10)
-                                break;
+                            if (index % 250 == 0)
+                            {
+                                Console.WriteLine($"skipping {auction.Uuid} {auction.Start} {pageId} {index} {count}");
+                                // another download handing over an auction first also counts as skipped, only an old one ends a race
+                                if (race == null ? index - count > 10 : auction.Start < lastUpdate - PublishDelay)
+                                    break;
+                            }
+                            continue;
                         }
-                        continue;
-                    }
-                    using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();
-                    try
-                    {
-                        FoundNew(pageId, p, page, tryCount, auction, prodSpan, count);
-                    }
-                    catch (Exception e)
-                    {
-                        Logger.Instance.Error(e, "Handing new auction");
-                    }
-                    if (count == 0)
-                    {
-                        var updatedAt = s.Headers.Where(h => h.Key.ToLower() == "date").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
-                        var tage = s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
-                        Console.WriteLine($"\nFound first new {auction.Uuid} {auction.Start} {pageId}\t tries:{tryCount}\t i: {iter}");
+                        using var prodSpan = activitySource.CreateActivity("Prod", ActivityKind.Server)?.Start();
+                        try
+                        {
+                            FoundNew(pageId, p, page, tryCount, auction, prodSpan, count);
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.Instance.Error(e, "Handing new auction");
+                        }
+                        if (count == 0 && (race == null || race.TryClaimFirstHandOver()))
+                        {
+                            var updatedAt = s.Headers.Where(h => h.Key.ToLower() == "date").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
+                            var tage = s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault();
+                            Console.WriteLine($"\nFound first new {auction.Uuid} {auction.Start} {pageId}\t tries:{tryCount}\t i: {iter}");
 
-                        // last "auction found" start
-                        Updater.LastPullComplete = intermediate;
-                        Updater.LastPull = (page._lastUpdated / 1000).ThisIsNowATimeStamp();
-                        firstByteTime.Set((downloadStart - pagUpdatedAt).TotalSeconds);
-                        firstParsed.Set((intermediate - pagUpdatedAt).TotalSeconds);
-                        Console.WriteLine($"dls:{downloadStart.Second}.{downloadStart.Millisecond} \tparse:{intermediate.Second}.{intermediate.Millisecond} \tnow: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  by{iter}\n{updatedAt} {tage}{(DateTime.Now - start)}");
-                    }
-                    uuid = auction.Uuid;
+                            // last "auction found" start
+                            Updater.LastPullComplete = intermediate;
+                            Updater.LastPull = (page._lastUpdated / 1000).ThisIsNowATimeStamp();
+                            firstByteTime.Set((downloadStart - pagUpdatedAt).TotalSeconds);
+                            firstParsed.Set((intermediate - pagUpdatedAt).TotalSeconds);
+                            Console.WriteLine($"dls:{downloadStart.Second}.{downloadStart.Millisecond} \tparse:{intermediate.Second}.{intermediate.Millisecond} \tnow: {DateTime.Now.Second}.{DateTime.Now.Millisecond} ({DateTime.Now - page.LastUpdated})  by{iter}\n{updatedAt} {tage}{(DateTime.Now - start)}");
+                        }
+                        uuid = auction.Uuid;
 
-                    count++;
+                        count++;
+                    }
                 }
-                pageOneDone.Set((DateTime.UtcNow - pagUpdatedAt).TotalSeconds);
-                // Last-Modified of the cached copy is when the origin finished sending it, up to 7 seconds after the first byte
-                lastReceived = DateTime.Now;
-                seenAuctions.Forget(pagUpdatedAt - TimeSpan.FromMinutes(3));
-                Console.WriteLine($"done: {DateTime.Now.Second}.{DateTime.Now.Millisecond.ToString("000")}");
+                catch (OperationCanceledException) when (race != null && raceToken.IsCancellationRequested)
+                {
+                    // another download is done, everything of this snapshot was handed over by then
+                    endedByItself = false;
+                }
+                // once per round, by the download that finished it
+                var finishedRound = race == null;
+                if (race != null && endedByItself)
+                {
+                    finishedRound = race.TryClaimFinish();
+                    race.Finished.Cancel();
+                    overallUpdateCancle.Cancel();
+                }
+                if (finishedRound)
+                {
+                    pageOneDone.Set((DateTime.UtcNow - pagUpdatedAt).TotalSeconds);
+                    // Last-Modified of the cached copy is when the origin finished sending it, up to 7 seconds after the first byte
+                    lastReceived = DateTime.Now;
+                    seenAuctions.Forget(pagUpdatedAt - TimeSpan.FromMinutes(3));
+                    Console.WriteLine($"done: {DateTime.Now.Second}.{DateTime.Now.Millisecond.ToString("000")}");
+                }
+                roundFinished = finishedRound;
             }
             LogHeaderName(siteSpan, s, "age");
             LogHeaderName(siteSpan, s, "date");
@@ -318,8 +400,9 @@ public class NewUpdater
 
             _ = int.TryParse(s.Headers.Where(h => h.Key.ToLower() == "age").Select(h => h.Value).FirstOrDefault()?.FirstOrDefault(), out age);
 
-            Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}");
-            UpdateDone();
+            Console.WriteLine($"Loaded page: {pageId} found {count} ({uuid}) on {DateTime.Now} {DateTime.Now.Millisecond} update: {page.LastUpdated}{(race == null ? "" : " by" + iter)}");
+            if (roundFinished)
+                UpdateDone();
         }
         return (LatestUpdate(page.LastUpdated, lastUpdate), age);
     }

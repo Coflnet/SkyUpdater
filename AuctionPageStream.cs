@@ -113,6 +113,12 @@ public class AuctionPageStream
         }
         if (reader.TokenType != JsonTokenType.StartObject)
             throw new InvalidDataException("unexpected token in auctions array: " + reader.TokenType);
+        // Probe a copy of the reader (it is a struct) so an incompletely buffered auction is
+        // detected without a thrown exception. TrySkip returns false instead of throwing on a
+        // non-final block, on the final block a truncated object still throws.
+        var probe = reader;
+        if (!probe.TrySkip())
+            return false; // element only partially buffered, nothing consumed
         try
         {
             auction = JsonSerializer.Deserialize<Auction>(ref reader);
