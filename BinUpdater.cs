@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 using Coflnet.Sky.Core;
@@ -58,9 +59,16 @@ public class BinUpdater
         return auctions;
     }
 
+    private static readonly ConcurrentDictionary<string, RestClient> clients = new();
+
+    /// <summary>
+    /// One long lived client per base url, a new client per call would open a new connection every time
+    /// </summary>
+    internal static RestClient ClientFor(string baseUrl) => clients.GetOrAdd(baseUrl, url => new RestClient(url));
+
     private static async Task<List<SaveAuction>> DownloadAndParse(string BaseUrl)
     {
-        var client = new RestClient(BaseUrl);
+        var client = ClientFor(BaseUrl);
         var request = new RestRequest($"/v2/skyblock/auctions_ended?cache=" + System.Net.Dns.GetHostName(), Method.Get);
 
         //Get the response and Deserialize

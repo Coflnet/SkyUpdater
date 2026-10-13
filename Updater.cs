@@ -326,9 +326,12 @@ namespace Coflnet.Sky.Updater
             return fallback;
         }
 
+        // one client for all pages so the connection is reused
+        private static readonly RestClient pageClient = new RestClient("https://api.hypixel.net/v2/skyblock");
+
         private async Task<AuctionPage> LoadPage(int page, DateTime latUpdate)
         {
-            var client = new RestClient("https://api.hypixel.net/v2/skyblock");
+            var client = pageClient;
             var request = new RestRequest($"auctions?page={page}", Method.Get);
             request.AddHeader("If-Modified-Since", FormatTime(GetPageLastUpdate(page, latUpdate)));
             //Get the response and Deserialize
