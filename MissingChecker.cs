@@ -23,11 +23,13 @@ public class MissingChecker : BackgroundService
     private string apiKey;
     private ILogger<MissingChecker> logger;
     private Kafka.KafkaCreator kafkaCreator;
+    private readonly CancelledAuctionDetector cancelledDetector;
     static RestClient skyblockClient = new RestClient("https://api.hypixel.net/v2/skyblock/");
     static Counter gracePeriodFind = Metrics.CreateCounter("sky_updater_grace_period_find", "auctions found in grace period");
 
-    public MissingChecker(IConfiguration config, ILogger<MissingChecker> logger, Kafka.KafkaCreator kafkaCreator)
+    public MissingChecker(IConfiguration config, ILogger<MissingChecker> logger, Kafka.KafkaCreator kafkaCreator, CancelledAuctionDetector cancelledDetector = null)
     {
+        this.cancelledDetector = cancelledDetector;
         this.config = config;
         this.logger = logger;
         this.kafkaCreator = kafkaCreator;
@@ -97,7 +99,18 @@ public class MissingChecker : BackgroundService
     public async Task UpdatePlayerAuctions(string playerId, IProducer<string, SaveAuction> p, string apiKey, KeyValuePair<string, string> addTag = default)
     {
         var auctions = await GetAuctionOfPlayer(playerId, apiKey).ConfigureAwait(false);
-        ProduceAuctions(p, addTag, auctions);
+        var list = auctions as IReadOnlyCollection<SaveAuction> ?? auctions.ToList();
+        ProduceAuctions(p, addTag, list);
+        if (cancelledDetector == null)
+            return;
+        try
+        {
+            await cancelledDetector.DetectAndProduceAsync(playerId, list, p, addTag.Value ?? "unknown", CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            logger.LogWarning(e, "cancel detection failed for {player}", playerId);
+        }
     }
 
     public void ProduceAuctions(IProducer<string, SaveAuction> p, KeyValuePair<string, string> addTag, IEnumerable<SaveAuction> auctions)
