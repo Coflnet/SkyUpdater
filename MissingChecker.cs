@@ -41,7 +41,13 @@ public class MissingChecker : BackgroundService
         if (keys == null || keys.Length <= Updater.updaterIndex)
             return; // no key for this instance
         apiKey = keys[Updater.updaterIndex];
-        await Kafka.KafkaConsumer.ConsumeBatch<SaveAuction>(
+        var backoff = new ConsumeBackoff();
+        await ConsumeRetryLoop.RunAsync("auction-check", () => ConsumeChecks(backoff, stoppingToken), backoff, logger, stoppingToken);
+    }
+
+    private Task ConsumeChecks(ConsumeBackoff backoff, CancellationToken stoppingToken)
+    {
+        return Kafka.KafkaConsumer.ConsumeBatch<SaveAuction>(
             config,
             config["TOPICS:AUCTION_CHECK"],
             async auctions =>
@@ -53,10 +59,12 @@ public class MissingChecker : BackgroundService
                     if (toCheck.Count == 0)
                     {
                         Console.WriteLine($"skipped batch because to old {auctions.FirstOrDefault()?.Uuid} " + auctions.FirstOrDefault()?.End);
+                        backoff.Reset();
                         return;
                     }
                     Console.WriteLine("check batch info: " + auctions.FirstOrDefault()?.Uuid + auctions.FirstOrDefault()?.End);
                     await CheckBatch(auctions);
+                    backoff.Reset();
                 }
                 catch (Exception e)
                 {
