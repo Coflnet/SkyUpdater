@@ -31,9 +31,7 @@ namespace Coflnet.Sky.Updater
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             Console.WriteLine(JSON.Stringify(topics));
-            var cc = KafkaCreator.GetClientConfig(config);
-            cc.SaslPassword = cc.SaslPassword?.Truncate(3);
-            Console.WriteLine(JSON.Stringify(cc));
+            Console.WriteLine(JSON.Stringify(KafkaConfigLog.Redact(KafkaCreator.GetClientConfig(config))));
             await kafkaCreator.CreateTopicIfNotExist(topics.Ah_Sumary, 2);
             await kafkaCreator.CreateTopicIfNotExist(topics.Bazaar, 2);
             await kafkaCreator.CreateTopicIfNotExist(topics.Missing_Auction);
