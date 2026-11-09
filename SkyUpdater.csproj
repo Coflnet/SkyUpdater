@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Coflnet.Sky.Core" Version="1.0.3" />
+    <PackageReference Include="Coflnet.Sky.Core" Version="1.0.4" />
     <ProjectReference Include="../Hypixel.NET/Hypixel.NET/Hypixel.NET.csproj" />
   </ItemGroup>
 
